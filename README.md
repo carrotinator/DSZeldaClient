@@ -1,2 +1,2 @@
 # DSZeldaClient
-Shared Archipelago Client for Zelda: Phantom Hourglass and Spirit Tracks
+Shared Archipelago Client Submodule for Zelda: Phantom Hourglass and Spirit Tracks
