@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, Set, Dict, Any
 from NetUtils import ClientStatus
 import worlds._bizhawk as bizhawk
 from worlds._bizhawk.client import BizHawkClient
-from .data.Constants import *
-from .data.DynamicEntrances import DYNAMIC_ENTRANCES_BY_SCENE
-from .Util import *
+from ..data.Constants import *
+from ..data.DynamicEntrances import DYNAMIC_ENTRANCES_BY_SCENE
+from ..Util import *
 
 if TYPE_CHECKING:
     from worlds._bizhawk.context import BizHawkClientContext
