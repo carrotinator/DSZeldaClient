@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from worlds._bizhawk.context import BizHawkClientContext
 
 logger = logging.getLogger("Client")
+# Adding test edit
 
 # Split up large values to write into smaller chunks
 def split_bits(value, size):
