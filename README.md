@@ -3,7 +3,9 @@ Shared Archipelago Client Submodule for Zelda: Phantom Hourglass and Spirit Trac
 
 # I'm bad at git so here are command line instructions to future me
 Setting up the submodule in a new local, while in the world folder (tloz_xx)
-```git submodule add https://github.com/carrotinator/DSZeldaClient/```
+```
+git submodule add https://github.com/carrotinator/DSZeldaClient/
+```
 
 You made an edit to DSZC, and need to push to remote. do this inside the submodule folder (DSZeldaClient)
 ```
