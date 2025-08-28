@@ -348,13 +348,6 @@ class DSZeldaClient(BizHawkClient):
                 await self.enter_game(ctx)
                 print(f"Started Game")
 
-            # If new file, set up starting flags
-            if slot_memory == 0 and not loading:
-                if self.watched_intro_cs(ctx):  # Check if watched intro cs
-                    await self._set_starting_flags(ctx)
-                else:
-                    return
-
             # Get current scene
             current_room = read_result.get("room", None)
             current_room = 0 if current_room == 0xFF else current_room  # Resetting in a dungeon sets a special value
@@ -392,6 +385,11 @@ class DSZeldaClient(BizHawkClient):
 
             # Nothing happens while loading
             if not loading and not self._loading_scene and not self._entered_entrance:
+
+                # If new file, set up starting flags
+                if slot_memory == 0:
+                    if self.watched_intro_cs(ctx):  # Check if watched intro cs
+                        await self._set_starting_flags(ctx)
 
                 # Read for checks on specific global flags
                 if len(self.watches) > 0:
