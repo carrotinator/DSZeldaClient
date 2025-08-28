@@ -2,6 +2,8 @@
 Shared Archipelago Client Submodule for Zelda: Phantom Hourglass and Spirit Tracks
 
 # I'm bad at git so here are command line instructions to future me
+Apparently pycharm *can* handle submodules just fine! i think you still need to set it up in command line, but once it's in pycharm can push submodule updates!
+
 Setting up the submodule in a new local, while in the world folder (tloz_xx)
 ```
 git submodule add https://github.com/carrotinator/DSZeldaClient/
