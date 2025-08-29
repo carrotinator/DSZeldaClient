@@ -388,7 +388,7 @@ class DSZeldaClient(BizHawkClient):
 
                 # If new file, set up starting flags
                 if slot_memory == 0:
-                    if self.watched_intro_cs(ctx):  # Check if watched intro cs
+                    if await self.watched_intro_cs(ctx):  # Check if watched intro cs
                         await self._set_starting_flags(ctx)
 
                 # Read for checks on specific global flags
