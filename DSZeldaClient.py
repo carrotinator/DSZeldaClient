@@ -364,10 +364,14 @@ class DSZeldaClient(BizHawkClient):
             if current_scene != self.last_scene and not self._entered_entrance and not self._loading_scene:
 
                 # Trigger a different entrance to vanilla
-                current_scene = await self._entrance_warp(ctx, current_scene, current_entrance)
+                current_stage, current_room, current_entrance = await self._entrance_warp(ctx, current_scene, current_entrance)
+                current_scene = current_stage * 0x100 + current_room
 
                 # Backup in case of missing loading
                 self._backup_coord_read = await self.get_coords(ctx, multi=True)
+
+                # Send data to tracker
+                await self.ut_bounce_scene(ctx, current_stage, current_room, current_entrance)
 
                 # Set dynamic flags on scene
                 await self._reset_dynamic_flags(ctx)
@@ -618,7 +622,7 @@ class DSZeldaClient(BizHawkClient):
 
     async def _entrance_warp(self, ctx, going_to, entrance=0):
         write_list = []
-        res = going_to
+        res = ((going_to & 0xFF00) >> 8, going_to & 0xFF, entrance)
 
         def write_entrance(s, r, e):
             return [(self.scene_addr[0], split_bits(s, 4), "Main RAM"),
@@ -632,7 +636,7 @@ class DSZeldaClient(BizHawkClient):
             home = self.starting_entrance[0]*0x100 + self.starting_entrance[1]
             if home != self.last_scene:
                 write_list += write_entrance(*self.starting_entrance)
-                res = home
+                res = self.starting_entrance
                 self.current_stage = self.starting_entrance[0]
                 logger.info("Warping to Start")
             else:
@@ -659,7 +663,7 @@ class DSZeldaClient(BizHawkClient):
                 if true_going_to in self.er_in_scene:
                     write_list += write_er(self.er_in_scene[true_going_to])
                     stage, room, *_ = self.er_in_scene[true_going_to]
-                    res = stage * 0x100 + room
+                    res = (stage, room, entrance)
             else:
                 coords = await self.get_coords(ctx, False)
                 for detect_data, exit_data in self.er_in_scene.items():
@@ -676,7 +680,7 @@ class DSZeldaClient(BizHawkClient):
                         if coords["y"] - self.er_y_offest == y and x_max > coords["x"] > x_min and z_max > coords["z"] > z_min:
                             write_list += write_er(exit_data)
                             stage, room, *_ = exit_data
-                            res = stage * 0x100 + room
+                            res = (stage, room, entrance)
 
         if write_list:
             await bizhawk.write(ctx.bizhawk_ctx, write_list)
@@ -1462,3 +1466,14 @@ class DSZeldaClient(BizHawkClient):
         :return:
         """
 
+    async def ut_bounce_scene(self, ctx, stage, room, entrance):
+        print(f"UT Bouncing {hex(stage)} {room} {entrance}")
+        await ctx.send_msgs([{
+            "cmd": "Bounce",
+            "games": [self.game],
+            "slots": [ctx.slot],
+            "tags": ['Tracker'],
+            "data": {"stage": stage,
+                     "room": room,
+                     "entrance": entrance}
+        }])
