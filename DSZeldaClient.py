@@ -381,7 +381,9 @@ class DSZeldaClient(BizHawkClient):
                 print(f"Entered new scene {hex(current_scene)} with ER {self.er_in_scene}")
                 self._entered_entrance = time.time()  # Triggered first part of loading - setting new room
                 self.entering_dungeon = None
-                self.delay_reset = False
+                if self.delay_reset:
+                    self.delay_reset = 0
+                    await self._remove_vanilla_item(ctx, num_received_items)
 
             # Nothing happens while loading
             if not loading and not self._loading_scene and not self._entered_entrance:
@@ -409,6 +411,8 @@ class DSZeldaClient(BizHawkClient):
                 if self.getting_location and not self.receiving_location and self.locations_in_scene is not None:
                     self.receiving_location = True
                     print("Receiving Item")
+                    if self.delay_reset > 1:
+                        self.delay_reset = 0
                     await self._process_checked_locations(ctx, None, detection_type=self.getting_location_type)
 
                 # Process received items
@@ -425,12 +429,16 @@ class DSZeldaClient(BizHawkClient):
                                 f"Reset item count to Multiworld's. If this is the wrong save file, you can safely quit without saving.")
 
                 # Exit location received cs
-                if self.receiving_location and not self.getting_location and not self.delay_reset:
-                    print("Item Received Successfully")
+                if self.receiving_location and not self.getting_location:
                     self.receiving_location = False
 
+                    # Increment delay reset, probably haven't received item yet
+                    if self.delay_reset == 1:
+                        self.delay_reset += 1
+                        print(f"Delay Reset still active, {self.delay_reset}")
+
                     # Check for delayed pickup first!
-                    if self.delay_pickup is not None:
+                    elif self.delay_pickup is not None:
                         print(f"Delay pickup {self.delay_pickup}")
                         fallback, pickups = self.delay_pickup
                         need_fallback = True
@@ -458,13 +466,9 @@ class DSZeldaClient(BizHawkClient):
 
                     # Remove vanilla item
                     elif self.last_vanilla_item:
+                        print("Item Received Successfully")
                         await self._remove_vanilla_item(ctx, num_received_items)
 
-                # Address reads often give items before animation
-                if self.delay_reset and self.getting_location:
-                    self.delay_reset = False
-                    self.receiving_location = False
-                    print(f"Delay reset over for {self.last_vanilla_item}")
 
                 await self.detect_warp_to_start(ctx, read_result)
                 await self.process_in_game(ctx, read_result)
@@ -894,9 +898,9 @@ class DSZeldaClient(BizHawkClient):
 
                 print(f"Processing locs {loc_name}")
                 print(
-                    f"{location.get('x_max', 0x8FFFFFFF)} > {link_coords['x']} > {location.get('x_min', -0x8FFFFFFF)}")
+                    f"\t{location.get('x_max', 0x8FFFFFFF)} > {link_coords['x']} > {location.get('x_min', -0x8FFFFFFF)}")
                 print(
-                    f"{location.get('z_max', 0x8FFFFFFF)} > {link_coords['z']} > {location.get('z_min', -0x8FFFFFFF)}")
+                    f"\t{location.get('z_max', 0x8FFFFFFF)} > {link_coords['z']} > {location.get('z_min', -0x8FFFFFFF)}")
 
                 if (location.get("x_max", 0x8FFFFFFF) > link_coords["x"] > location.get("x_min", -0x8FFFFFFF) and
                         location.get("z_max", 0x8FFFFFFF) > link_coords["z"] > location.get("z_min", -0x8FFFFFFF) and
@@ -920,7 +924,7 @@ class DSZeldaClient(BizHawkClient):
 
         # Delay reset of vanilla item from certain address reads
         if location is not None and "delay_reset" in location:
-            self.delay_reset = True
+            self.delay_reset = 1
             print(f"Started Delay Reset for {self.last_vanilla_item}")
 
         # Send locations
