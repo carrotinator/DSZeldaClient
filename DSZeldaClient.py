@@ -578,11 +578,25 @@ class DSZeldaClient(BizHawkClient):
                     exit_data = self.entrance_id_to_entrance[exit_id]
 
                     # Don't save vanilla entrances. No fix for continuous cause exit data does not store extra_data
-                    if detect_data[3] is None or detect_data[:2] != exit_data[:2]:  # TODO: This looks wrong
+                    if detect_data[3] is not None or detect_data[:2] != exit_data[:2]:
                         res[scene][detect_data] = exit_data
+                        res |= self.add_special_er_data(ctx, scene, detect_data, exit_data)
 
             self.er_map = res
             print(f"ER Map: {self.er_map}")
+
+    def add_special_er_data(self, ctx, er_map, scene, detect_data, exit_data):
+        """
+        for adding special bonus data to ER dictionary.
+        Used in ph for making sure Isle of Ruins entrances work no matter the water level.
+        :param ctx:
+        :param er_map:
+        :param scene:
+        :param detect_data:
+        :param exit_data:
+        :return:
+        """
+        return er_map
 
     async def enter_game(self, ctx):
         """
