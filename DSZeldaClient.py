@@ -560,8 +560,8 @@ class DSZeldaClient(BizHawkClient):
 
             # Loop through entrance data, format data
             for data in self.entrances.values():
-                stage, room, entrance = data["entrance"]
-                link_coords = data.get("coords", None)
+                stage, room, entrance = data.entrance
+                link_coords = data.coords
 
                 # Handle extra data
                 extra_data = {"y": link_coords[1]} if link_coords else {}  # Ensure that the y value is always checked
@@ -574,17 +574,25 @@ class DSZeldaClient(BizHawkClient):
                 res.setdefault(scene, dict())
 
                 # Figure pair from generation
-                if data["id"] in pairings:
+                if data.id in pairings:
                     exit_id = pairings[data["id"]]
                     exit_data = self.entrance_id_to_entrance[exit_id]
 
                     # Don't save vanilla entrances. No fix for continuous cause exit data does not store extra_data
                     if detect_data[3] is not None or detect_data[:2] != exit_data[:2]:
+                        print(f"error temp {detect_data}")
                         res[scene][detect_data] = exit_data
-                        res |= self.add_special_er_data(ctx, scene, detect_data, exit_data)
+                        res = self.add_special_er_data(ctx, res, scene, detect_data, exit_data)
+
 
             self.er_map = res
-            print(f"ER Map: {self.er_map}")
+            print(f"ER Map:")
+            for scene, data in self.er_map.items():
+                print(f"\t{hex(scene)}")
+                for d2 in data.items():
+                    print(f"\t\t{d2}")
+
+
 
     def add_special_er_data(self, ctx, er_map, scene, detect_data, exit_data):
         """
@@ -680,9 +688,10 @@ class DSZeldaClient(BizHawkClient):
                     stage, room, *_ = self.er_in_scene[true_going_to]
                     res = (stage, room, entrance)
             else:
+                print(f"Potential ER: continuous boundary f{going_to}")
                 coords = await self.get_coords(ctx, False)
                 for detect_data, exit_data in self.er_in_scene.items():
-                    if detect_data[3] and detect_data[:2] == true_going_to[:2]:
+                    if detect_data[3] and detect_data[:3] == true_going_to[:3]:
                         # Do location comparison
                         extra_data = {key: value for key, value in list(detect_data[3])}
                         print(f"Extra data: {extra_data} from {list(detect_data[3])}")
@@ -692,15 +701,47 @@ class DSZeldaClient(BizHawkClient):
                         z_max = extra_data.get("z_max", 0x8FFFFFFF)
                         z_min = extra_data.get("z_min", -0x8FFFFFFF)
 
+                        print(f"\tx: {x_max} > {coords['x']} > {x_min}")
+                        print(f"\ty: {coords['y']- self.er_y_offest}  == {y}")
+                        print(f"\tz: {z_max} > {coords['z']} > {z_min}")
+
                         if coords["y"] - self.er_y_offest == y and x_max > coords["x"] > x_min and z_max > coords["z"] > z_min:
+                            print(f"ER Detected: {detect_data}")
+                            if "conditional" in extra_data and not await self.conditional_er(ctx, extra_data["conditional"]):
+                                extra_data.pop("y")
+                                print(f"extra data: {extra_data}, {detect_data[:3]}")
+
+                                # Figure out reciprical entrance
+                                exit_data = [(*d["entrance"], *d.get("coords", None)) for d in self.entrances.values()
+                                             if d["exit"] == detect_data[:3]
+                                             and extra_data == d.get("extra_data", {})
+                                             and y == d["coords"][1]][0]
+
+                                print(f"exit data: {exit_data}")
+                                write_list = write_er(exit_data)
+                                res = exit_data[:3]
+                                print(f"res: {res}")
+                                break
+
+                            print(f"\twarping to {exit_data}")
                             write_list += write_er(exit_data)
                             stage, room, *_ = exit_data
                             res = (stage, room, entrance)
+                            break
 
         if write_list:
             await bizhawk.write(ctx.bizhawk_ctx, write_list)
         return res
 
+    async def conditional_er(self, ctx, conditions) -> bool:
+        """
+        for handling custom conditional ER statements.
+        If return false, ER will pop you back out again
+        :param ctx:
+        :param conditions:
+        :return:
+        """
+        return True
 
     async def _reset_dynamic_flags(self, ctx):
         print(f"resetting flags {self._dynamic_flags_to_reset}")
