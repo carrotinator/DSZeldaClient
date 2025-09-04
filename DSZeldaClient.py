@@ -193,9 +193,13 @@ class DSZeldaClient(BizHawkClient):
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
         try:
             if not await self.check_game_version(ctx):
+                logger.error("Invalid rom")
                 return False
         except bizhawk.RequestFailedError:
-            print("Invalid rom")
+            logger.error("Invalid rom")
+            return False
+        except UnicodeDecodeError:
+            logger.error("You are using Bizhawk version 2.9.x, please use version 2.10.x")
             return False
 
         ctx.game = self.game
@@ -639,8 +643,9 @@ class DSZeldaClient(BizHawkClient):
         """
 
     async def _entrance_warp(self, ctx, going_to, entrance=0):
-        write_list = []
+        e_write_list = []
         res = ((going_to & 0xFF00) >> 8, going_to & 0xFF, entrance)
+        defer_entrance = False
 
         def write_entrance(s, r, e):
             return [(self.scene_addr[0], split_bits(s, 4), "Main RAM"),
@@ -653,7 +658,7 @@ class DSZeldaClient(BizHawkClient):
             self.warp_to_start_flag = False
             home = self.starting_entrance[0]*0x100 + self.starting_entrance[1]
             if home != self.last_scene:
-                write_list += write_entrance(*self.starting_entrance)
+                e_write_list += write_entrance(*self.starting_entrance)
                 res = self.starting_entrance
                 self.current_stage = self.starting_entrance[0]
                 logger.info("Warping to Start")
@@ -673,40 +678,44 @@ class DSZeldaClient(BizHawkClient):
 
                 return write_res
 
-            # If not a continuous boundary
-            if entrance < 0xF0:
-                for detect_data, exit_data in self.er_in_scene.items():
-                    if detect_data.detect_exit_scene(going_to, entrance):
-                        if await self.conditional_er(ctx, exit_data):
-                            write_list += write_er(exit_data)
-                            res = exit_data.entrance
-                            print(f"Detected simple entrance: {detect_data} => {exit_data}")
-                            break
-                        write_list += write_er(detect_data)
-                        res = detect_data.entrance
-                        break
-            else:
-                print(f"Potential ER: continuous boundary f{hex(going_to)}")
-                coords = await self.get_coords(ctx, False)
-                for detect_data, exit_data in self.er_in_scene.items():
-                    if detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest):
-                        if await self.conditional_er(ctx, exit_data):
-                            print(f"\tDetected continuous entrance: {detect_data} => {exit_data}")
-                            write_list += write_er(exit_data)
-                            res = exit_data.entrance
-                            break
-                        write_list += write_er(detect_data)
-                        res = detect_data.entrance
-                        break
+            def post_process(d):
+                new_entrance = d.entrance
+                d.debug_print()
+                return write_er(d), new_entrance
 
-        if write_list:
-            await bizhawk.write(ctx.bizhawk_ctx, write_list)
+            # If not a continuous boundary
+            coords = await self.get_coords(ctx)
+            for detect_data, exit_data in self.er_in_scene.items():
+                if detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest):
+                    if await self.conditional_er(ctx, exit_data):
+                        print(f"Detected simple entrance: {detect_data} => {exit_data}")
+                        e_write_list, res = post_process(exit_data)
+                        defer_entrance = True
+                    else:
+                        e_write_list, res = post_process(detect_data)
+                    break
+
+        if e_write_list:
+            print(e_write_list)
+            await bizhawk.write(ctx.bizhawk_ctx, e_write_list)
+        if defer_entrance:
+            await self.store_visited_entrances(ctx, detect_data, exit_data)
+
         return res
+
+    async def store_visited_entrances(self, ctx, detect_data, exit_data):
+        """
+        store visited entrances as a set of ints to datastorage
+        :param ctx:
+        :param detect_data:
+        :param exit_data:
+        :return:
+        """
 
     async def conditional_er(self, ctx, conditions) -> bool:
         """
         for handling custom conditional ER statements.
-        If return false, ER will pop you back out again
+        If return false, ER will pop you back out the entrance you came from
         :param ctx:
         :param conditions:
         :return:
