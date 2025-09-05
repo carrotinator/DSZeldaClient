@@ -653,6 +653,22 @@ class DSZeldaClient(BizHawkClient):
                     (self.scene_addr[2], split_bits(0, 4), "Main RAM"),
                     (self.scene_addr[3], split_bits(e, 1), "Main RAM")]
 
+        def write_er(exit_d: "PhantomHourglassEntrance"):
+            write_res = write_entrance(*exit_d.entrance)
+            if exit_d.entrance[2] > 0xF0:
+                x, y, z = exit_d.coords
+                print(f"exit coords {x} {y} {z}")
+                self.er_exit_coord_writes = [(self.exit_coords_addr[0], split_bits(x, 4), "Main RAM"),
+                                             (self.exit_coords_addr[1], split_bits(y, 4), "Main RAM"),
+                                             (self.exit_coords_addr[2], split_bits(z, 4), "Main RAM")]
+
+            return write_res
+
+        def post_process(d):
+            new_entrance = d.entrance
+            d.debug_print()
+            return write_er(d), new_entrance
+
         # Warp to start
         if self.warp_to_start_flag:
             self.warp_to_start_flag = False
@@ -667,41 +683,42 @@ class DSZeldaClient(BizHawkClient):
 
         elif self.er_in_scene:
 
-            def write_er(exit_d: "PhantomHourglassEntrance"):
-                write_res = write_entrance(*exit_d.entrance)
-                if exit_d.entrance[2] > 0xF0:
-                    x, y, z = exit_d.coords
-                    print(f"exit coords {x} {y} {z}")
-                    self.er_exit_coord_writes = [(self.exit_coords_addr[0], split_bits(x, 4), "Main RAM"),
-                                                 (self.exit_coords_addr[1], split_bits(y, 4), "Main RAM"),
-                                                 (self.exit_coords_addr[2], split_bits(z, 4), "Main RAM")]
-
-                return write_res
-
-            def post_process(d):
-                new_entrance = d.entrance
-                d.debug_print()
-                return write_er(d), new_entrance
-
-            # If not a continuous boundary
+            # Determine Entrance Warp
             coords = await self.get_coords(ctx)
             for detect_data, exit_data in self.er_in_scene.items():
                 if detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest):
                     if await self.conditional_er(ctx, exit_data):
-                        print(f"Detected simple entrance: {detect_data} => {exit_data}")
+                        print(f"Detected entrance: {detect_data} => {exit_data}")
                         e_write_list, res = post_process(exit_data)
                         defer_entrance = True
                     else:
                         e_write_list, res = post_process(detect_data)
                     break
 
+        # Unrandomized entrances can still have bounce conditions
+        if not e_write_list:
+            bounce_entrance = await self.conditional_bounce(ctx, going_to, entrance)
+            print(f"Trying bounce: {bounce_entrance}")
+            if bounce_entrance:
+                e_write_list, res = post_process(bounce_entrance)
+
+
         if e_write_list:
-            print(e_write_list)
             await bizhawk.write(ctx.bizhawk_ctx, e_write_list)
         if defer_entrance:
             await self.store_visited_entrances(ctx, detect_data, exit_data)
 
         return res
+
+    async def conditional_bounce(self, cxt, scene, entrance) -> "PhantomHourglassEntrance" or None:
+        """
+        checks for bounce conditions if entrance is not affected by ER.
+        returns the entrance to return to
+        :param cxt:
+        :param scene:
+        :param entrance:
+        :return:
+        """
 
     async def store_visited_entrances(self, ctx, detect_data, exit_data):
         """
