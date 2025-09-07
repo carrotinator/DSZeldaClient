@@ -413,6 +413,7 @@ class DSZeldaClient(BizHawkClient):
                     self.receiving_location = True
                     print("Receiving Item")
                     await self._process_checked_locations(ctx, None, detection_type=self.getting_location_type)
+                    self.getting_location = False
 
                 # Process received items
                 if num_received_items < len(ctx.items_received):
@@ -963,8 +964,6 @@ class DSZeldaClient(BizHawkClient):
                 last_item_read = self.last_key_count
             else:
                 last_item = ITEMS_DATA[delay_item_check]
-                if last_item is None:
-                    break
                 last_item_read = await read_memory_value(ctx, last_item["address"], last_item.get("size", 1))
             self.delay_pickup[1].append([loc, delay_item_check, last_item_read])
         print(f"Delay pickup {self.delay_pickup}")
