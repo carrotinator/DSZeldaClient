@@ -419,7 +419,6 @@ class DSZeldaClient(BizHawkClient):
                     if self.delay_reset > 1:
                         self.delay_reset = 0
                     await self._process_checked_locations(ctx, None, detection_type=self.getting_location_type)
-                    self.getting_location = False
 
                 # Process received items
                 if num_received_items < len(ctx.items_received):
@@ -458,10 +457,10 @@ class DSZeldaClient(BizHawkClient):
                                                                         check_item.get("size", 1))
                             if "Rupee" in item:
                                 if new_item_read - value == ITEMS_DATA[item]["value"]:
-                                    await self._process_checked_locations(ctx, location, True)
+                                    await self._process_checked_locations(ctx, location, True, item=item)
                                     need_fallback = False
                             elif new_item_read != value:
-                                await self._process_checked_locations(ctx, location, True)
+                                await self._process_checked_locations(ctx, location, True, item=item)
                                 need_fallback = False
 
                         if need_fallback:
@@ -886,7 +885,7 @@ class DSZeldaClient(BizHawkClient):
         return True
 
     async def _process_checked_locations(self, ctx: "BizHawkClientContext", pre_process: str = None, r=False,
-                                        detection_type=None):
+                                        detection_type=None, item: str | None = None):
         local_checked_locations = set()
         all_checked_locations = ctx.checked_locations
         location = None
@@ -897,7 +896,7 @@ class DSZeldaClient(BizHawkClient):
             loc_id = self.location_name_to_id[pre_process]
             location = LOCATIONS_DATA[pre_process]
             if r or (loc_id not in all_checked_locations):
-                await self._set_vanilla_item(ctx, location)
+                await self._set_vanilla_item(ctx, location, item)
                 local_checked_locations.add(loc_id)
             print(f"pre-processed {pre_process}, vanill {self.last_vanilla_item}")
         else:
@@ -978,19 +977,22 @@ class DSZeldaClient(BizHawkClient):
 
         self.delay_pickup = [loc_name, []]
         for loc in delay_locations:
-            delay_item_check = LOCATIONS_DATA[loc].get("vanilla_item", None)
-            if "Small Key" in delay_item_check:
-                self.last_key_count = await read_memory_value(ctx, self.key_address)
-                last_item_read = self.last_key_count
-            else:
-                last_item = ITEMS_DATA[delay_item_check]
-                last_item_read = await read_memory_value(ctx, last_item["address"], last_item.get("size", 1))
-            self.delay_pickup[1].append([loc, delay_item_check, last_item_read])
+            delay_item_check: str | list[str] = LOCATIONS_DATA[loc]["vanilla_item"]
+            if isinstance(delay_item_check, str):
+                delay_item_check = [delay_item_check]
+            for item in delay_item_check:
+                if "Small Key" in item:
+                    self.last_key_count = await read_memory_value(ctx, self.key_address)
+                    last_item_read = self.last_key_count
+                else:
+                    last_item = ITEMS_DATA[item]
+                    last_item_read = await read_memory_value(ctx, last_item["address"], last_item.get("size", 1))
+                self.delay_pickup[1].append([loc, item, last_item_read])
         print(f"Delay pickup {self.delay_pickup}")
     # Processes events defined in data\dynamic_flags.py
 
-    async def _set_vanilla_item(self, ctx, location):
-        item = location.get("vanilla_item", None)
+    async def _set_vanilla_item(self, ctx, location, vanilla_item: str | None = None):
+        item = vanilla_item or location["vanilla_item"]
         item_data = ITEMS_DATA[item]
         print(f"Setting vanilla for {item_data}")
         if item is not None and not item_data.get("dummy", False):
@@ -1244,7 +1246,7 @@ class DSZeldaClient(BizHawkClient):
 
                 await write_memory_value(ctx, address, value,
                                          incr=data.get('incremental', None), unset=True, size=data.get("size", 1))
-        self.last_vanilla_item = []
+        self.last_vanilla_item.clear()
     # Called during location processing to determine what vanilla item to remove
 
     async def remove_special_vanilla_item(self, ctx, vanilla_item: str):
