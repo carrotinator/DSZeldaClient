@@ -302,6 +302,7 @@ class DSZeldaClient(BizHawkClient):
             self._loaded_menu_read_list = False
             self.last_scene = None
             self._from_menu = True
+            self.er_in_scene = None
             ctx.watcher_timeout = 0.5
             return
 
@@ -372,7 +373,6 @@ class DSZeldaClient(BizHawkClient):
 
             # Process on new room. As soon as it's triggered, changing the scene variable changes entrance destination
             if current_scene != self.last_scene and not self._entered_entrance and not self._loading_scene:
-
                 # Trigger a different entrance to vanilla
                 current_stage, current_room, current_entrance = await self._entrance_warp(ctx, current_scene, current_entrance)
                 current_scene = current_stage * 0x100 + current_room
