@@ -662,6 +662,8 @@ class DSZeldaClient(BizHawkClient):
                                              (self.exit_coords_addr[1], split_bits(y, 4), "Main RAM"),
                                              (self.exit_coords_addr[2], split_bits(z, 4), "Main RAM")]
 
+            write_res += self.write_respawn_entrance(exit_d)
+
             return write_res
 
         def post_process(d):
@@ -704,11 +706,20 @@ class DSZeldaClient(BizHawkClient):
 
 
         if e_write_list:
+            print(f"Writing entrance warp {e_write_list}")
             await bizhawk.write(ctx.bizhawk_ctx, e_write_list)
         if defer_entrance:
             await self.store_visited_entrances(ctx, detect_data, exit_data)
 
         return res
+
+    def write_respawn_entrance(self, exit_data):
+        """
+        when at sea in ph with island shuffle on, the respawn point is not tied to the exit and must be set manually.
+        :param exit_data:
+        :return: list of write data
+        """
+        return []
 
     async def conditional_bounce(self, cxt, scene, entrance) -> "PhantomHourglassEntrance" or None:
         """
