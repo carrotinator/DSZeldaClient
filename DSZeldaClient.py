@@ -151,6 +151,7 @@ class DSZeldaClient(BizHawkClient):
         self.last_vanilla_item: list[str] = []
         self.delay_reset = False
         self.getting_location = False
+        self.precise_detection = False
 
         self._previous_game_state = False  # Updated every successful cycle
         self._just_entered_game = False  # Set when disconnected or on menu, unset after one full cycle of fully loaded
@@ -296,6 +297,26 @@ class DSZeldaClient(BizHawkClient):
         """
         return False
 
+    async def detect_in_menu(self, ctx, current_stage):
+        """
+        for detecting special conditions while on the menu.
+        Used in ph to do ER on entering game from menu
+        :param ctx:
+        :param current_stage:
+        :return:
+        """
+        pass
+
+    async def run_precisely(self, ctx, current_stage):
+        """
+        on detecting certain conditions, run special code with a faster refresh rate
+        if returns true, don't run the rest of game watcher
+        :param ctx:
+        :param current_stage:
+        :return:
+        """
+        return False
+
     async def game_watcher(self, ctx: "BizHawkClientContext") -> None:
         if not ctx.server or not ctx.server.socket.open or ctx.server.socket.closed or ctx.slot is None or ctx.slot == 0:
             self._just_entered_game = True
@@ -321,24 +342,41 @@ class DSZeldaClient(BizHawkClient):
             read_result = await read_memory_values(ctx, self.main_read_list)
             self.read_result = read_result
 
+            # Get current scene
             in_game = read_result["game_state"]
             slot_memory = read_result["slot_id"]
             current_stage = read_result["stage"]
             self.current_stage = current_stage
 
+            current_room = read_result.get("room", None)
+            current_room = 0 if current_room == 0xFF else current_room  # Resetting in a dungeon sets a special value
+            self.current_scene = current_scene = current_stage * 0x100 + current_room
+            current_entrance = read_result.get("entrance", 0)
+            num_received_items = read_result.get("received_item_index", None)
+
             # Loading variables
             loading_scene = self.process_loading_variable(read_result)
             loading = loading_scene or self._entered_entrance
 
+            # Precise detection happens early cause precision
+            if self.precise_detection:
+                if await self.run_precisely(ctx, current_stage):
+                    return
+
             # If player is on title screen, don't do anything else
-            if not in_game or current_stage not in STAGES:
+            if not in_game or current_stage not in STAGES and not self.precise_detection:
                 self._previous_game_state = False
                 self._from_menu = True
                 ctx.watcher_timeout = 0.5
                 print("NOT IN GAME")
+
+                # Check for stuff
+                await self.detect_in_menu(ctx, current_stage)
+
                 # Finished game?
                 if not ctx.finished_game:
                     await self._process_game_completion(ctx)
+
                 return
 
             # While game from main menu
@@ -358,13 +396,6 @@ class DSZeldaClient(BizHawkClient):
                                            # 6 frame intervals to catch bounce timings
                 await self.enter_game(ctx)
                 print(f"Started Game")
-
-            # Get current scene
-            current_room = read_result.get("room", None)
-            current_room = 0 if current_room == 0xFF else current_room  # Resetting in a dungeon sets a special value
-            self.current_scene = current_scene = current_stage * 0x100 + current_room
-            current_entrance = read_result.get("entrance", 0)
-            num_received_items = read_result.get("received_item_index", None)
 
             # getting_location can be overwritten in process_read_list
             self.getting_location = read_result.get("getting_location", None)
@@ -581,15 +612,15 @@ class DSZeldaClient(BizHawkClient):
                     # Create map from scene to entrance dataclass
                     res.setdefault(data.scene, {})
                     res[data.scene][data] = exit_data
-                    print(f"Creating scene data {hex(data.scene)}: {data} => {exit_data}")
+                    # print(f"Creating scene data {hex(data.scene)}: {data} => {exit_data}")
                     res = self.add_special_er_data(ctx, res, data.scene, data, exit_data)
 
             self.er_map = res
-            print(f"ER Map:")
-            for scene, data in self.er_map.items():
-                print(f"\t{hex(scene)}")
-                for d2, d3 in data.items():
-                    print(f"\t\t{d2} => {d3}")
+            # print(f"ER Map:")
+            # for scene, data in self.er_map.items():
+            #     print(f"\t{hex(scene)}")
+            #     for d2, d3 in data.items():
+            #         print(f"\t\t{d2} => {d3}")
 
 
 
@@ -642,6 +673,17 @@ class DSZeldaClient(BizHawkClient):
         :return:
         """
 
+    async def er_from_menu(self, ctx, stage, room, entrance):
+        """
+
+        :param ctx:
+        :param stage:
+        :param room:
+        :param entrance:
+        :return:
+        """
+        return []
+
     async def _entrance_warp(self, ctx, going_to, entrance=0):
         e_write_list = []
         res = ((going_to & 0xFF00) >> 8, going_to & 0xFF, entrance)
@@ -683,6 +725,16 @@ class DSZeldaClient(BizHawkClient):
             else:
                 logger.info("Warp to start failed, warping from home scene")
 
+        # ER from death or title screen if in dungeon
+        elif self.last_scene is None:
+            stage, room, entr = res
+            print(f"Tried menu er for {res}")
+            if self.read_result["room"] == 0xFF and stage != 0:
+                menu_er = await self.er_from_menu(ctx, stage, room, entr)
+                if menu_er:
+                    e_write_list = write_entrance(*menu_er)
+                    res = menu_er
+
         elif self.er_in_scene:
 
             # Determine Entrance Warp
@@ -710,7 +762,7 @@ class DSZeldaClient(BizHawkClient):
             await bizhawk.write(ctx.bizhawk_ctx, e_write_list)
         if defer_entrance:
             await self.store_visited_entrances(ctx, detect_data, exit_data)
-
+        await bizhawk.unlock(ctx.bizhawk_ctx)
         return res
 
     def write_respawn_entrance(self, exit_data):
