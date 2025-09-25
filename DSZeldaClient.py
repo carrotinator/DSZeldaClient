@@ -1040,7 +1040,8 @@ class DSZeldaClient(BizHawkClient):
         print(f"Setting vanilla for {item_data}")
         if item is not None and not item_data.get("dummy", False):
             if ("incremental" in item_data or "progressive" in item_data or
-                    item_data["id"] not in [i.item for i in ctx.items_received]):
+                    item_data["id"] not in [i.item for i in ctx.items_received] or
+                    item_data.get("always_process", False)):
                 self.last_vanilla_item.append(item)
 
                 await self.unset_special_vanilla_items(ctx, location, item)
