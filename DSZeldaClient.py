@@ -12,10 +12,7 @@ from ..Util import *
 
 if TYPE_CHECKING:
     from worlds._bizhawk.context import BizHawkClientContext
-    try:
-        from ..data.Entrances import PhantomHourglassEntrance
-    except ImportError:
-        print("Missing <game>Entrance dataclass")
+    from ..data.Entrances import PHTransition
 
 logger = logging.getLogger("Client")
 # Adding test edit
@@ -178,8 +175,8 @@ class DSZeldaClient(BizHawkClient):
         self._log_received_items = False
 
         self.warp_to_start_flag = False
-        self.er_map: dict[int, dict["PhantomHourglassEntrance", "PhantomHourglassEntrance"]] = {}
-        self.er_in_scene: dict["PhantomHourglassEntrance", "PhantomHourglassEntrance"] | None = None
+        self.er_map: dict[int, dict["PHTransition", "PHTransition"]] = {}
+        self.er_in_scene: dict["PHTransition", "PHTransition"] | None = None
         self.er_exit_coord_writes: list | None = None
 
         self.delay_pickup = None
@@ -653,7 +650,7 @@ class DSZeldaClient(BizHawkClient):
                     (self.scene_addr[2], split_bits(0, 4), "Main RAM"),
                     (self.scene_addr[3], split_bits(e, 1), "Main RAM")]
 
-        def write_er(exit_d: "PhantomHourglassEntrance"):
+        def write_er(exit_d: "PHTransition"):
             write_res = write_entrance(*exit_d.entrance)
             if exit_d.entrance[2] > 0xF0:
                 x, y, z = exit_d.coords
