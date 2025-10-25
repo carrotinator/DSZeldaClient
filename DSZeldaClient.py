@@ -604,8 +604,8 @@ class DSZeldaClient(BizHawkClient):
     async def _set_starting_flags(self, ctx: "BizHawkClientContext") -> None:
         write_list = [(self.slot_id_addr, split_bits(ctx.slot, 2), "Main RAM")]
         print(f"New game, setting starting flags for slot {ctx.slot}")
-        for adr, value in STARTING_FLAGS:
-            write_list.append((adr, [value], "Main RAM"))
+        for adr, *value in STARTING_FLAGS:
+            write_list.append((adr, value, "Main RAM"))
 
         write_list += await self.set_special_starting_flags(ctx)
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
