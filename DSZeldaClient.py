@@ -185,6 +185,8 @@ class DSZeldaClient(BizHawkClient):
         self.key_value = 0
         self.metal_count = 0
 
+        self.last_dungeon_warp_target = None
+
         self.tried_short_cs = False
 
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
@@ -826,7 +828,11 @@ class DSZeldaClient(BizHawkClient):
 
             # Overwrite er_in_scene with dynamic entrance
             detect_data = data["detect_data"]
-            self.er_in_scene[detect_data] = data["exit_data"]
+            if data["exit_data"] is None:
+                if data["destination"] == "_connected_dungeon_entrance":
+                    self.er_in_scene[detect_data] = self.update_boss_warp(ctx, self.current_stage, scene)
+            else:
+                self.er_in_scene[detect_data] = data["exit_data"]
             print(f"\t{detect_data} => {data['exit_data']}")
 
     async def _has_dynamic_requirements(self, ctx, data) -> bool:
@@ -873,8 +879,12 @@ class DSZeldaClient(BizHawkClient):
         def check_slot_data(d):
             if "has_slot_data" in d:
                 for slot, value in d["has_slot_data"]:
-                    if ctx.slot_data.get(slot, None) != value:
-                        return False
+                    if type(value) is list:
+                        if ctx.slot_data.get(slot, None) not in value:
+                            return False
+                    else:
+                        if ctx.slot_data.get(slot, None) != value:
+                            return False
             return True
 
         # Came from particular location
@@ -1378,6 +1388,16 @@ class DSZeldaClient(BizHawkClient):
             if not await self.enter_special_key_room(ctx, stage, scene_id):
                 await self.update_key_count(ctx, stage)
         self.entering_from = scene_id
+
+    def update_boss_warp(self, ctx, stage, scene_id):
+        """
+        method for setting self.last_dungeon_warp_target for redirecting warps after bosses in entrance rando
+        :param ctx:
+        :param stage:
+        :param scene_id:
+        :return: PHTransition for the location
+        """
+        return None
 
     async def _load_local_locations(self, ctx, scene):
         # Load locations in room into loop
