@@ -1091,7 +1091,7 @@ class DSZeldaClient(BizHawkClient):
         print(f"Vanilla item: {self.last_vanilla_item} for {item_name}")
 
         # If same as vanilla item don't remove
-        if self.last_vanilla_item and item_name == self.last_vanilla_item[-1]:
+        if self.last_vanilla_item and item_name == self.last_vanilla_item[-1] and "Boss Key" not in item_name:
             self.last_vanilla_item.pop()
             print(f"oops it's vanilla or dummy! {self.last_vanilla_item}")
             write_list += await self.write_totok_keys_lol(ctx, item_name, item_data)
@@ -1507,8 +1507,7 @@ class DSZeldaClient(BizHawkClient):
             if "locations" in hint_data:
                 # Hint required dungeons
                 if "Dungeon Hints" in hint_data["locations"]:
-                    for loc in ctx.slot_data.get("required_dungeon_locations", []):
-                        local_scouted_locations.add(self.location_name_to_id[loc])
+                    local_scouted_locations.update(self.dungeon_hints(ctx))
                 else:
                     locations_checked = ctx.locations_scouted
                     for loc in hint_data["locations"]:
@@ -1556,3 +1555,11 @@ class DSZeldaClient(BizHawkClient):
                      "room": room,
                      "entrance": entrance}
         }])
+
+    def dungeon_hints(self, ctx):
+        """
+        Write out dungeon hints depending on settings
+        :param ctx:
+        :return: list of location to scout
+        """
+        return []
