@@ -162,6 +162,7 @@ class DSZeldaClient(BizHawkClient):
         self.last_stage = None
         self.entering_from = None
         self.entering_dungeon = None
+        self.current_entrance = None
 
         self.stage_address = 0  # Used for scene flags
         self.new_stage_loading = None
@@ -360,7 +361,8 @@ class DSZeldaClient(BizHawkClient):
 
             # Get current scene
             current_room = read_result.get("room", None)
-            current_room = 0 if current_room == 0xFF else current_room  # Resetting in a dungeon sets a special value
+            current_room = 0 if current_room == 0xFF and current_stage != 0x29 else current_room  # Resetting in a dungeon sets a special value
+            current_room = 3 if current_room == 0xFF else current_room
             self.current_scene = current_scene = current_stage * 0x100 + current_room
             current_entrance = read_result.get("entrance", 0)
             num_received_items = read_result.get("received_item_index", None)
@@ -375,6 +377,7 @@ class DSZeldaClient(BizHawkClient):
                 # Trigger a different entrance to vanilla
                 current_stage, current_room, current_entrance = await self._entrance_warp(ctx, current_scene, current_entrance)
                 current_scene = current_stage * 0x100 + current_room
+                self.current_entrance = current_entrance
 
                 # Backup in case of missing loading
                 self._backup_coord_read = await self.get_coords(ctx, multi=True)
@@ -395,7 +398,7 @@ class DSZeldaClient(BizHawkClient):
                     await self._remove_vanilla_item(ctx, num_received_items)
 
             # Nothing happens while loading
-            if not loading and not self._loading_scene and not self._entered_entrance:
+            if ctx.server is not None and not loading and not self._loading_scene and not self._entered_entrance:
 
                 # If new file, set up starting flags
                 if slot_memory == 0:
@@ -425,7 +428,7 @@ class DSZeldaClient(BizHawkClient):
                     await self._process_checked_locations(ctx, None, detection_type=self.getting_location_type)
 
                 # Process received items
-                if num_received_items < len(ctx.items_received):
+                if num_received_items is not None and num_received_items < len(ctx.items_received):
                     if self._just_entered_game:
                         self._log_received_items = True
                     await self._process_received_items(ctx, num_received_items, self._log_received_items)
@@ -667,6 +670,9 @@ class DSZeldaClient(BizHawkClient):
 
         def post_process(d):
             new_entrance = d.entrance
+            # Ship exits are weird
+            if new_entrance[2] == 0xFA:
+                new_entrance = tuple(new_entrance[:2] + [d.extra_data["ship_exit"]])
             d.debug_print()
             return write_er(d), new_entrance
 
@@ -907,6 +913,11 @@ class DSZeldaClient(BizHawkClient):
                         return False
             return True
 
+        def not_has_entrance(d):
+            if "not_on_entrance" in d:
+                if self.current_entrance in d["not_on_entrance"]:
+                    return False
+            return True
 
         if not check_items(data):
             print(f"\t{data['name']} does not have item reqs")
@@ -924,6 +935,8 @@ class DSZeldaClient(BizHawkClient):
             print(f"\t{data['name']} is missing bits")
             return False
         if not await self.has_special_dynamic_requirements(ctx, data):
+            return False
+        if not not_has_entrance(data):
             return False
 
         return True
@@ -986,6 +999,7 @@ class DSZeldaClient(BizHawkClient):
                     local_checked_locations.add(loc_bytes)
                     await self._set_vanilla_item(ctx, location)
                     print(f"Got location {loc_name}! with vanilla {self.last_vanilla_item} id {loc_bytes}")
+                    self.locations_in_scene.pop(loc_name)  # Remove location for overlapping purposes
                     break
                 location = None
 
