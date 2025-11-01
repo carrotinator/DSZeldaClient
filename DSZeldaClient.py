@@ -656,8 +656,14 @@ class DSZeldaClient(BizHawkClient):
                     (self.scene_addr[3], split_bits(e, 1), "Main RAM")]
 
         def write_er(exit_d: "PHTransition"):
-            write_res = write_entrance(*exit_d.entrance)
-            if exit_d.entrance[2] > 0xF0:
+            if exit_d.entrance[2] == 0xFA:
+                # Special condition for exiting ships at sea
+                new_entrance = tuple(list(exit_d.entrance[:2]) + [exit_d.extra_data["ship_exit"]])
+                write_res = write_entrance(*new_entrance)
+            else:
+                write_res = write_entrance(*exit_d.entrance)
+
+            if exit_d.entrance[2] > 0xFA:
                 x, y, z = exit_d.coords
                 print(f"exit coords {x} {y} {z}")
                 self.er_exit_coord_writes = [(self.exit_coords_addr[0], split_bits(x, 4), "Main RAM"),
@@ -672,7 +678,7 @@ class DSZeldaClient(BizHawkClient):
             new_entrance = d.entrance
             # Ship exits are weird
             if new_entrance[2] == 0xFA:
-                new_entrance = tuple(new_entrance[:2] + [d.extra_data["ship_exit"]])
+                new_entrance = tuple(list(new_entrance[:2]) + [d.extra_data["ship_exit"]])
             d.debug_print()
             return write_er(d), new_entrance
 
@@ -913,9 +919,12 @@ class DSZeldaClient(BizHawkClient):
                         return False
             return True
 
-        def not_has_entrance(d):
+        def has_entrance(d):
             if "not_on_entrance" in d:
                 if self.current_entrance in d["not_on_entrance"]:
+                    return False
+            if "on_entrance" in d:
+                if self.current_entrance not in d["on_entrance"]:
                     return False
             return True
 
@@ -936,7 +945,7 @@ class DSZeldaClient(BizHawkClient):
             return False
         if not await self.has_special_dynamic_requirements(ctx, data):
             return False
-        if not not_has_entrance(data):
+        if not has_entrance(data):
             return False
 
         return True
