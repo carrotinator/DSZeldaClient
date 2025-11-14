@@ -1012,15 +1012,16 @@ class DSZeldaClient(BizHawkClient):
                     break
                 location = None
 
-        if location is not None and "set_bit" in location:
-            for addr, bit in location["set_bit"]:
-                print(f"Setting bit {bit} for location vanil {location['vanilla_item']}")
-                await write_memory_value(ctx, addr, bit)
+        if location is not None:
+            if "set_bit" in location:
+                for addr, bit in location["set_bit"]:
+                    print(f"Setting bit {bit} for location vanil {location['vanilla_item']}")
+                    await write_memory_value(ctx, addr, bit)
 
-        # Delay reset of vanilla item from certain address reads
-        if location is not None and "delay_reset" in location:
-            self.delay_reset = 1
-            print(f"Started Delay Reset for {self.last_vanilla_item}")
+            # Delay reset of vanilla item from certain address reads
+            if "delay_reset" in location:
+                self.delay_reset = 1
+                print(f"Started Delay Reset for {self.last_vanilla_item}")
 
         # Send locations
         # print(f"Local locations: {local_checked_locations} in \n{all_checked_locations}")
@@ -1096,6 +1097,7 @@ class DSZeldaClient(BizHawkClient):
         :param location:
         :return:
         """
+        return
 
     async def _process_received_items(self, ctx: "BizHawkClientContext", num_received_items: int, log_items=False) -> None:
         # If the game hasn't received all items yet and the received item struct doesn't contain an item, then
