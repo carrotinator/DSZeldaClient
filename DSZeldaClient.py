@@ -816,7 +816,7 @@ class DSZeldaClient(BizHawkClient):
         # Write dynamic flags to memory
         read_list = {a: (a, 1, "Main RAM") for a in read_addr}
         prev = await read_memory_values(ctx, read_list)
-        print(f"{[[hex(int(a)), hex(v)] for a, v in prev.items()]}")
+        print(f"prevs: {[[hex(int(a)), hex(v)] for a, v in prev.items()]}")
 
         # Calculate values to write
         for a, v in set_bits.items():
@@ -826,7 +826,7 @@ class DSZeldaClient(BizHawkClient):
 
         # Write
         write_list = [(int(a), [v], "Main RAM") for a, v in prev.items()]
-        print(f"Dynaflags writes: {prev}")
+        print(f"Dynaflags writes: {[[hex(a), [hex(i) for i in v]] for a, v, _ in write_list]}")
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
         return write_list
 
