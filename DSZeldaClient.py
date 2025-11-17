@@ -912,11 +912,17 @@ class DSZeldaClient(BizHawkClient):
         # Read a dict of addresses to see if they match value
         async def check_bits(d):
             if "check_bits" in d:
-                r_list = {addr: (addr, 1, "Main RAM") for addr, _ in d["check_bits"].items()}
+                r_list = {addr: (addr, 1, "Main RAM") for addr, _, *args in d["check_bits"]}
+                v_lookup = {addr: v for addr, v, *args in d["check_bits"]}
+                arg_lookup = {addr: args for addr, v, *args in d["check_bits"] if args}
                 values = await read_memory_values(ctx, r_list)
                 for addr, p in values.items():
-                    if not (p & d["check_bits"][addr]):
-                        return False
+                    if not arg_lookup[addr]:
+                        if not (p & v_lookup[addr]):
+                            return False
+                    elif "not" in arg_lookup[addr]:
+                        if p & v_lookup[addr]:
+                            return False
             return True
 
         def has_entrance(d):
@@ -1491,6 +1497,7 @@ class DSZeldaClient(BizHawkClient):
         if new_keys != 0:
             new_keys = 7 if new_keys >= 7 else new_keys
             new_keys, reset_key_count = await self.update_special_key_count(ctx, current_stage, new_keys, key_data, key_values, key_address)
+            new_keys = 0 if new_keys < 0 else new_keys
             write_list = [(key_address, [new_keys], "Main RAM")]
             if reset_key_count:
                 reset_tracker = (~key_data["filter"]) & key_values["tracker"]
