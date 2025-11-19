@@ -145,7 +145,7 @@ class DSZeldaClient(BizHawkClient):
         self.locations_in_scene = {}
         self.watches = {}
         self.receiving_location = False
-        self.last_vanilla_item: list[str] = []
+        self.last_vanilla_item: list[str | list[tuple[str, int]]] = []
         self.delay_reset = False
         self.getting_location = False
 
@@ -455,19 +455,13 @@ class DSZeldaClient(BizHawkClient):
                         fallback, pickups = self.delay_pickup
                         need_fallback = True
                         for location, item, value in pickups:
-                            if "Small Key" in item:
-                                self.key_value = await read_memory_value(ctx, self.key_address)
-                                new_item_read = self.key_value
-                            else:
-                                check_item = ITEMS_DATA[item]
-                                new_item_read = await read_memory_value(ctx, check_item["address"],
-                                                                        check_item.get("size", 1))
+                            new_item_read = await self.get_item_read(ctx, item)
                             if "Rupee" in item:
                                 if new_item_read - value == ITEMS_DATA[item]["value"]:
-                                    await self._process_checked_locations(ctx, location, True)
+                                    await self._process_checked_locations(ctx, location, True, item=item)
                                     need_fallback = False
                             elif new_item_read != value:
-                                await self._process_checked_locations(ctx, location, True)
+                                await self._process_checked_locations(ctx, location, True, item=item)
                                 need_fallback = False
 
                         if need_fallback:
@@ -619,8 +613,8 @@ class DSZeldaClient(BizHawkClient):
     async def _set_starting_flags(self, ctx: "BizHawkClientContext") -> None:
         write_list = [(self.slot_id_addr, split_bits(ctx.slot, 2), "Main RAM")]
         print(f"New game, setting starting flags for slot {ctx.slot}")
-        for adr, value in STARTING_FLAGS:
-            write_list.append((adr, [value], "Main RAM"))
+        for adr, *value in STARTING_FLAGS:
+            write_list.append((adr, value, "Main RAM"))
 
         write_list += await self.set_special_starting_flags(ctx)
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
@@ -967,7 +961,7 @@ class DSZeldaClient(BizHawkClient):
         return True
 
     async def _process_checked_locations(self, ctx: "BizHawkClientContext", pre_process: str = None, r=False,
-                                        detection_type=None):
+                                        detection_type=None, item: str | None = None):
         local_checked_locations = set()
         all_checked_locations = ctx.checked_locations
         location = None
@@ -978,7 +972,7 @@ class DSZeldaClient(BizHawkClient):
             loc_id = self.location_name_to_id[pre_process]
             location = LOCATIONS_DATA[pre_process]
             if r or (loc_id not in all_checked_locations):
-                await self._set_vanilla_item(ctx, location)
+                await self._set_vanilla_item(ctx, location, item)
                 local_checked_locations.add(loc_id)
             print(f"pre-processed {pre_process}, vanill {self.last_vanilla_item}")
         else:
@@ -1050,6 +1044,13 @@ class DSZeldaClient(BizHawkClient):
         """
         return False
 
+    async def get_item_read(self, ctx, item_name: str) -> int:
+        if "Small Key" in item_name:
+            return await read_memory_value(ctx, self.key_address)
+        else:
+            item = ITEMS_DATA[item_name]
+            return await read_memory_value(ctx, item["address"], item.get("size", 1))
+
     async def _set_delay_pickup(self, ctx, loc_name, location):
         delay_locations = []
         delay_pickup = location["delay_pickup"]
@@ -1060,28 +1061,29 @@ class DSZeldaClient(BizHawkClient):
 
         self.delay_pickup = [loc_name, []]
         for loc in delay_locations:
-            delay_item_check = LOCATIONS_DATA[loc].get("vanilla_item", None)
-            if "Small Key" in delay_item_check:
-                self.last_key_count = await read_memory_value(ctx, self.key_address)
-                last_item_read = self.last_key_count
-            else:
-                last_item = ITEMS_DATA[delay_item_check]
-                last_item_read = await read_memory_value(ctx, last_item["address"], last_item.get("size", 1))
-            self.delay_pickup[1].append([loc, delay_item_check, last_item_read])
+            delay_item_check: str | list[str] = LOCATIONS_DATA[loc]["vanilla_item"]
+            if isinstance(delay_item_check, str):
+                delay_item_check = [delay_item_check]
+            for item in delay_item_check:
+                self.delay_pickup[1].append([loc, item, await self.get_item_read(ctx, item)])
         print(f"Delay pickup {self.delay_pickup}")
     # Processes events defined in data\dynamic_flags.py
 
-    async def _set_vanilla_item(self, ctx, location):
-        item = location.get("vanilla_item", None)
-        item_data = ITEMS_DATA[item]
-        print(f"Setting vanilla for {item_data}")
-        if item is not None and not item_data.get("dummy", False):
-            if ("incremental" in item_data or "progressive" in item_data or
-                    item_data["id"] not in [i.item for i in ctx.items_received] or
-                    item_data.get("always_process", False)):
-                self.last_vanilla_item.append(item)
+    async def _set_vanilla_item(self, ctx, location, vanilla_item: str | None = None):
+        item: str | list[str] = vanilla_item or location["vanilla_item"]
+        if isinstance(item, str):
+            item_data = ITEMS_DATA[item]
+            print(f"Setting vanilla for {item_data}")
+            if item is not None and not item_data.get("dummy", False):
+                if ("incremental" in item_data or "progressive" in item_data or
+                        item_data["id"] not in [i.item for i in ctx.items_received]):
+                    self.last_vanilla_item.append(item)
 
-                await self.unset_special_vanilla_items(ctx, location, item)
+                    await self.unset_special_vanilla_items(ctx, location, item)
+
+        # If there are multiple items possible at this location, store all of them with current counts for later
+        else:
+            self.last_vanilla_item.append([(_item, await self.get_item_read(ctx, _item)) for _item in item])
 
     async def unset_special_vanilla_items(self, ctx, location, item):
         """
@@ -1296,39 +1298,53 @@ class DSZeldaClient(BizHawkClient):
     async def _remove_vanilla_item(self, ctx: "BizHawkClientContext", num_received_items):
         print(f"Removing vanilla items {self.last_vanilla_item}")
         for item in self.last_vanilla_item:
-            # Handle game specific items
-            if "dummy" in ITEMS_DATA[item]:
-                continue
-            if not await self.remove_special_vanilla_item(ctx, item):
-                data = ITEMS_DATA[item]
-                value = data.get('value', 1)
-                if "Small Key" in item:
-                    address = self.key_address = await self.get_small_key_address(ctx)
-                    print("small key?")
-                elif "progressive" in data:
-                    write_list = []
-                    index = sum([1 for i in ctx.items_received[:num_received_items] if i.item == data["id"]])
-                    if index >= len(data["progressive"]):
-                        continue
-                    address, value = data["progressive"][index]
-                    if "give_ammo" in data:
-                        ammo_v = data["give_ammo"][min(max(index - 1, 0), len(data["give_ammo"])-1)]
-                        write_list.append((data["ammo_address"], [ammo_v], "Main RAM"))
-                    # Progressive overwrite fix
-                    if "progressive_overwrite" in data and index > 1:
-                        write_list.append((data["progressive"][index-1][0], [data["progressive"][index-1][1]], "Main RAM"))
-                    await bizhawk.write(ctx.bizhawk_ctx, write_list)
-                else:
-                    address, value = data["address"], data.get("value", 1)
+            if isinstance(item, str):
+                # Handle game specific items
+                if "dummy" in ITEMS_DATA[item]:
+                    continue
+                if not await self.remove_special_vanilla_item(ctx, item):
+                    data = ITEMS_DATA[item]
+                    value = data.get('value', 1)
+                    if "Small Key" in item:
+                        address = self.key_address = await self.get_small_key_address(ctx)
+                        print("small key?")
+                    elif "progressive" in data:
+                        write_list = []
+                        index = sum([1 for i in ctx.items_received[:num_received_items] if i.item == data["id"]])
+                        if index >= len(data["progressive"]):
+                            continue
+                        address, value = data["progressive"][index]
+                        if "give_ammo" in data:
+                            ammo_v = data["give_ammo"][min(max(index - 1, 0), len(data["give_ammo"])-1)]
+                            write_list.append((data["ammo_address"], [ammo_v], "Main RAM"))
+                        # Progressive overwrite fix
+                        if "progressive_overwrite" in data and index > 1:
+                            write_list.append((data["progressive"][index-1][0], [data["progressive"][index-1][1]], "Main RAM"))
+                        await bizhawk.write(ctx.bizhawk_ctx, write_list)
+                    else:
+                        address, value = data["address"], data.get("value", 1)
 
-                # Catch vanilla rupees going over 9999
-                if "Rupee" in item:
-                    if self.prev_rupee_count + value > 9999:
-                        value =  9999 - self.prev_rupee_count
+                    # Catch vanilla rupees going over 9999
+                    if "Rupee" in item:
+                        if self.prev_rupee_count + value > 9999:
+                            value =  9999 - self.prev_rupee_count
 
-                await write_memory_value(ctx, address, value,
-                                         incr=data.get('incremental', None), unset=True, size=data.get("size", 1))
-        self.last_vanilla_item = []
+                    await write_memory_value(ctx, address, value,
+                                             incr=data.get('incremental', None), unset=True, size=data.get("size", 1))
+
+            # If item is a list of items, we instead want to check which one Link got and loop that back into this process
+            else:
+                for _item, _count in item:
+                    new_item_read = await self.get_item_read(ctx, _item)
+                    if "Rupee" in item:
+                        if new_item_read - _count == ITEMS_DATA[_item]["value"]:
+                            self.last_vanilla_item.append(_item)
+                            break
+                    elif new_item_read != _count:
+                        self.last_vanilla_item.append(_item)
+                        break
+
+        self.last_vanilla_item.clear()
     # Called during location processing to determine what vanilla item to remove
 
     async def remove_special_vanilla_item(self, ctx, vanilla_item: str):
