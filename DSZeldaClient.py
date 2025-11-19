@@ -693,6 +693,7 @@ class DSZeldaClient(BizHawkClient):
             # Determine Entrance Warp
             coords = await self.get_coords(ctx)
             for detect_data, exit_data in self.er_in_scene.items():
+                print(f"trying to detect ER {res} {detect_data.entrance} {detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest)}")
                 if detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest):
                     if await self.conditional_er(ctx, exit_data):
                         print(f"Detected entrance: {detect_data} => {exit_data}")
@@ -845,21 +846,38 @@ class DSZeldaClient(BizHawkClient):
         def check_items(d):
             if "has_items" in d:
                 counter = [0] * len(d["has_items"])
-                for has_item in ctx.items_received:
-                    for i, want_item in enumerate(d["has_items"]):
-                        if has_item.item == ITEMS_DATA[want_item[0]]["id"]:
-                            counter[i] += 1
-                for item, count_have in zip(d["has_items"], counter):
-                    item, count_want, *operation = item
-                    if not operation:
-                        if (count_want == 0 and count_have != 0) or (count_want > 0 and count_have < count_want):
-                            return False
-                    elif operation[0] == "has_exact":
-                        if count_want != count_have:
-                            return False
-                    elif operation[0] == "not_has":
-                        if count_have >= count_want:
-                            return False
+                label = "has_items"
+            elif "not_has_all_items" in d:
+                counter = [0] * len(d["not_has_all_items"])
+                label = "not_has_all_items"
+            else:
+                return True
+
+            for has_item in ctx.items_received:
+                for i, want_item in enumerate(d[label]):
+                    if has_item.item == ITEMS_DATA[want_item[0]]["id"]:
+                        counter[i] += 1
+
+            for item, count_have in zip(d.get("has_items", []), counter):
+                item, count_want, *operation = item
+                if not operation:
+                    if (count_want == 0 and count_have != 0) or (count_want > 0 and count_have < count_want):
+                        return False
+                elif operation[0] == "has_exact":
+                    if count_want != count_have:
+                        return False
+                elif operation[0] == "not_has":
+                    if count_have >= count_want:
+                        return False
+
+            not_have_counter = 0
+            for item, count_have in zip(d.get("not_has_all_items", []), counter):
+                item, count_want, *operation = item
+                if count_have > count_want:
+                    not_have_counter += 1
+                if not_have_counter == len(counter):
+                    return False
+
             return True
 
         # Check location conditions
