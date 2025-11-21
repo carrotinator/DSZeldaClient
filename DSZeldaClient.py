@@ -359,6 +359,10 @@ class DSZeldaClient(BizHawkClient):
                 await self.enter_game(ctx)
                 print(f"Started Game")
 
+            # getting_location can be overwritten in process_read_list
+            self.getting_location = read_result.get("getting_location", None)
+            self.is_dead = not read_result.get("link_health", 12)
+
             # Get current scene
             current_room = read_result.get("room", None)
             current_room = 0 if current_room == 0xFF and current_stage != 0x29 else current_room  # Resetting in a dungeon sets a special value
@@ -367,9 +371,7 @@ class DSZeldaClient(BizHawkClient):
             current_entrance = read_result.get("entrance", 0)
             num_received_items = read_result.get("received_item_index", None)
 
-            # getting_location can be overwritten in process_read_list
-            self.getting_location = read_result.get("getting_location", None)
-            self.is_dead = not read_result.get("link_health", 12)
+
             await self.process_read_list(ctx, read_result)
 
             # Process on new room. As soon as it's triggered, changing the scene variable changes entrance destination
