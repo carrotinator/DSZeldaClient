@@ -467,7 +467,8 @@ class DSZeldaClient(BizHawkClient):
                                 need_fallback = False
 
                         if need_fallback:
-                            await self._process_checked_locations(ctx, fallback, True)
+                            vanilla_item = LOCATIONS_DATA[fallback]["vanilla_item"]
+                            await self._process_checked_locations(ctx, fallback, True, item=vanilla_item)
 
                         self.delay_pickup = None
                         self.last_key_count = 0
@@ -1093,10 +1094,11 @@ class DSZeldaClient(BizHawkClient):
         item: str | list[str] = vanilla_item or location["vanilla_item"]
         if isinstance(item, str):
             item_data = ITEMS_DATA[item]
-            print(f"Setting vanilla for {item_data}")
+            print(f"Setting vanilla for {item} {item_data}")
             if item is not None and not item_data.get("dummy", False):
                 if ("incremental" in item_data or "progressive" in item_data or
-                        item_data["id"] not in [i.item for i in ctx.items_received]):
+                        item_data["id"] not in [i.item for i in ctx.items_received] or
+                        "always_process" in item_data):
                     self.last_vanilla_item.append(item)
 
                     await self.unset_special_vanilla_items(ctx, location, item)
