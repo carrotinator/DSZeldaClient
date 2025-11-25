@@ -932,7 +932,7 @@ class DSZeldaClient(BizHawkClient):
                 arg_lookup = {addr: args for addr, v, *args in d["check_bits"] if args}
                 values = await read_memory_values(ctx, r_list)
                 for addr, p in values.items():
-                    if not arg_lookup[addr]:
+                    if not arg_lookup.get(addr, False):
                         if not (p & v_lookup[addr]):
                             return False
                     elif "not" in arg_lookup[addr]:
