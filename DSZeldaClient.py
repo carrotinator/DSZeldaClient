@@ -916,6 +916,7 @@ class DSZeldaClient(BizHawkClient):
 
         # Came from particular location
         def check_last_room(d):
+            # print(f"checking last scene {self.last_scene} {d.get('last_scenes', [])}")
             for i in d.get("not_last_scenes", []):
                 if self.last_scene == i:
                     return False
@@ -1146,7 +1147,7 @@ class DSZeldaClient(BizHawkClient):
         print(f"Vanilla item: {self.last_vanilla_item} for {item_name}")
 
         # If same as vanilla item don't remove
-        if self.last_vanilla_item and item_name == self.last_vanilla_item[-1] and "Boss Key" not in item_name:
+        if self.last_vanilla_item and item_name == self.last_vanilla_item[-1] and "always_process" not in item_data:
             self.last_vanilla_item.pop()
             print(f"oops it's vanilla or dummy! {self.last_vanilla_item}")
             write_list += await self.write_totok_keys_lol(ctx, item_name, item_data)

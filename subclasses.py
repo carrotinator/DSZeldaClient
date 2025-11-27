@@ -20,7 +20,7 @@ class DSTransition:
         self.two_way: bool = data.get("two_way", True)
         self.category_group = data["type"]
         self.direction = data["direction"]
-        self.island = data.get("island", self.entrance_groups.NONE)
+        self.island = data.get("island", self.entrance_groups.NONE if self.entrance_groups else None)
         self.coords: tuple | None = data.get("coords", None)
         self.extra_data: dict = data.get("extra_data", {})
 
