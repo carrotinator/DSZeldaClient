@@ -27,7 +27,7 @@ def split_bits(value, size):
     return ret
 
 
-def item_count(ctx, item_name):
+def item_count(ctx, item_name) -> int:
     return sum([1 for i in ctx.items_received if i.item == ITEMS_DATA[item_name]["id"]])
 
 
