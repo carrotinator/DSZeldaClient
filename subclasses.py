@@ -13,8 +13,8 @@ class DSTransition:
 
         self.name: str = name
         self.id: int | None = data.get("id", None)
-        self.entrance: tuple = data["entrance"]
-        self.exit: tuple = data["exit"]
+        self.entrance: tuple = data.get("entrance", None)
+        self.exit: tuple = data.get("exit", None)
         self.entrance_region: str = data["entrance_region"]
         self.exit_region: str = data["exit_region"]
         self.two_way: bool = data.get("two_way", True)
@@ -24,10 +24,10 @@ class DSTransition:
         self.coords: tuple | None = data.get("coords", None)
         self.extra_data: dict = data.get("extra_data", {})
 
-        self.stage, self.room, _ = self.entrance
+        self.stage, self.room, _ = self.entrance if self.entrance else (None, None, None)
         self.scene: int = self.get_scene()
         self.exit_scene: int = self.get_exit_scene()
-        self.exit_stage = self.exit[0]
+        self.exit_stage = self.exit[0] if self.exit else None
         self.y = self.coords[1] if self.coords else None
 
         self.vanilla_reciprocal: DSTransition | None = None  # Paired location
@@ -35,10 +35,16 @@ class DSTransition:
         self.copy_number = 0
 
     def get_scene(self):
-        return self.stage * 0x100 + self.room
+        if self.room:
+            return self.stage * 0x100 + self.room
+        else:
+            return self.stage << 2
 
     def get_exit_scene(self):
-        return self.exit[0] * 0x100 + self.exit[1]
+        if self.exit:
+            return self.exit[0] * 0x100 + self.exit[1]
+        else:
+            return None
 
     def is_pairing(self, r1, r2) -> bool:
         return r1 == self.entrance_region and r2 == self.exit_region
@@ -121,7 +127,7 @@ class DSTransition:
                 "entrance_region": data.get("reverse_exit_region", data["exit_region"]),
                 "exit_region": data.get("reverse_entrance_region", data["entrance_region"]),
                 "id": ident,
-                "entrance": data["exit"],
+                "entrance": data.get("exit", data.get("entrance", None)),
                 "exit": data["entrance"],
                 "two_way": two_way,
                 "type": data["type"],
