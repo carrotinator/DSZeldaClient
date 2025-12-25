@@ -1,5 +1,71 @@
 from enum import IntEnum
 
+from worlds.tloz_ph.DSZeldaClient.DSZeldaClient import read_memory_value
+
+
+class DSItem:
+    items = {}
+
+    def __init__(self, name, data):
+        self.name = name
+        self.data = data
+        self.id = data["id"]
+        self.classification = data["classification"]
+        self.items[name] = self
+
+        # Write info
+        self.address = data.get("address", None)
+        self.value = data.get("value", None)
+        self.size = data.get("size", None)
+        self.progressive = data.get("progressive", None)
+
+        # Ammo info
+        self.ammo_address = data.get("ammo_address", None)
+        self.give_ammo = data.get("give_ammo", None)
+
+        # Operation tags
+        self.incremental = data.get("incremental", None)
+        self.max = data.get("max", None)
+        self.progressive_overwrite = data.get("progressive_overwrite", None)
+
+        self.dummy = data.get("dummy", False)
+        self.always_process = data.get("always_process", None)
+
+        # data for loading the items bar
+        self.inventory_id = data.get("inventory_id", None)
+
+        # Bonus Operations
+        self.set_bit = data.get("set_bit", None)
+        self.set_bit_in_room = data.get("set_bit_in_room", None)
+        self.hint_on_receive = data.get("hint_on_receive", None)
+
+        # Other tags
+        self.refill = data.get("refill", None)
+        self.ship_part = data.get("ship_part", None)
+        self.backup_filler = data.get("backup_filler", None)
+        self.dungeon = data.get("dungeon", None)
+        self.treasure = data.get("treasure", None)
+        self.ship = data.get("ship", None)
+
+        # Item groups
+        self.item_groups = data.get("item_groups", None)
+
+    async def normal_item(self, ctx):
+        current_value = await read_memory_value(ctx, self.address, self.size)
+        return self.address, current_value | self.value, "Main RAM"
+
+    async def incremental_item(self, ctx):
+        new_value = await read_memory_value(ctx, self.address, self.size) + self.value
+        new_value = self.max if new_value > self.max else new_value
+        return self.address, new_value, "Main RAM"
+
+    async def vanilla_item(self, ctx, last_vanilla_item):
+        pass
+
+    def determine_write_function(self, ctx, last_vanilla_item):
+        if last_vanilla_item and self.name == last_vanilla_item[-1] and not self.always_process:
+            pass
+
 class DSTransition:
     """
     Datastructures for dealing with Transitions on the client side.

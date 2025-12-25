@@ -107,6 +107,21 @@ class DSZeldaClient(BizHawkClient):
 
     def __init__(self) -> None:
         super().__init__()
+        # Basics
+        self.main_read_list = {}
+        self.read_result = {}
+        self.current_stage = 0xB
+        self.current_scene = None
+        self.last_stage = None
+        self.entering_from = None
+        self.entering_dungeon = None
+        self.current_entrance = None
+        self.slot_id_addr = None
+        self.received_item_index_addr = None
+        self.save_slot = 0
+        self.version_offset = 0
+
+        # Lookup tables
         self.item_id_to_name = build_item_id_to_name_dict()
         self.location_name_to_id = build_location_name_to_id_dict()
         self.location_area_to_watches = build_location_room_to_watches()
@@ -116,31 +131,37 @@ class DSZeldaClient(BizHawkClient):
 
         self.starting_flags = None
         self.dungeon_key_data = None
-        self.slot_id_addr = None
-        self.received_item_index_addr = None
+        self.stage_address = 0  # Used for scene flags
+        self.items = {}
+
+        # ER vars
+        self.last_dungeon_warp_target = None
         self.starting_entrance = (11, 3, 5)  # stage, room, entrance
         self.scene_addr = (0, 0, 0, 0)  # Stage, room, floor, entrance
         self.exit_coords_addr = (0x1B2EC8, 0x1B2ECC, 0x1B2ED0)  # x, y, z. what coords to spawn link at when entering a
-        # continuous transition
+            # continuous transition
         self.er_y_offest = 164  # In ph i use coords who's y is 164 off the entrance y
         self.ADDR_gMapManager = 0xe60
         self.stage_flag_offset = 0x268
         self.entrances = {}
-        self.hint_data = {}
+        self.warp_to_start_flag = False
+        self.er_map: dict[int, dict["PHTransition", "PHTransition"]] = {}
+        self.er_in_scene: dict["PHTransition", "PHTransition"] | None = None
+        self.er_exit_coord_writes: list | None = None
 
         self.local_checked_locations = set()
         self.local_scouted_locations = set()
         self.local_tracker = {}
+        self.hint_data = {}
 
+        # Deathlink
         self._set_deathlink = False  # Check for toggling death link setting
         self.last_deathlink = None
         self.was_alive_last_frame = False
         self.is_expecting_received_death = False
         self.is_dead = False  # Read from read_result
 
-        self.save_slot = 0
-        self.version_offset = 0
-
+        # Location Handling
         self.last_scene = None
         self.locations_in_scene = {}
         self.watches = {}
@@ -148,45 +169,26 @@ class DSZeldaClient(BizHawkClient):
         self.last_vanilla_item: list[str | list[tuple[str, int]]] = []
         self.delay_reset = False
         self.getting_location = False
-
-        self._previous_game_state = False  # Updated every successful cycle
-        self._just_entered_game = False  # Set when disconnected or on menu, unset after one full cycle of fully loaded
-        self._loaded_menu_read_list = False  #
-        self._from_menu = True  # Last scene was menu
-        self._dynamic_flags_to_reset = []
-
-        self.main_read_list = {}
-        self.read_result = {}
-        self.current_stage = 0xB
-        self.current_scene = None
-        self.last_stage = None
-        self.entering_from = None
-        self.entering_dungeon = None
-        self.current_entrance = None
-
-        self.stage_address = 0  # Used for scene flags
-        self.new_stage_loading = None
-
         self.getting_location_type = None
-
-        self._entered_entrance = False
-        self._loading_scene = False
-        self._backup_coord_read = None
-        self.prev_rupee_count = 0
-        self._log_received_items = False
-
-        self.warp_to_start_flag = False
-        self.er_map: dict[int, dict["PHTransition", "PHTransition"]] = {}
-        self.er_in_scene: dict["PHTransition", "PHTransition"] | None = None
-        self.er_exit_coord_writes: list | None = None
-
         self.delay_pickup = None
         self.last_key_count = 0
         self.key_address = 0
         self.key_value = 0
         self.metal_count = 0
 
-        self.last_dungeon_warp_target = None
+        # Game state bools
+        self._previous_game_state = False  # Updated every successful cycle
+        self._just_entered_game = False  # Set when disconnected or on menu, unset after one full cycle of fully loaded
+        self._loaded_menu_read_list = False  #
+        self._from_menu = True  # Last scene was menu
+        self._dynamic_flags_to_reset = []
+
+        self.new_stage_loading = None
+        self._entered_entrance = False
+        self._loading_scene = False
+        self._backup_coord_read = None
+        self.prev_rupee_count = 0
+        self._log_received_items = False
 
         self.tried_short_cs = False
 
@@ -1129,6 +1131,10 @@ class DSZeldaClient(BizHawkClient):
         :return:
         """
         return
+
+    async def _pri2(self, ctx: "BizHawkClientContext", num_received_items: int, log_items=False):
+        item_id = ctx.items_received[num_received_items].item
+        item = ITEMS[self.item_id_to_name[item_id]]
 
     async def _process_received_items(self, ctx: "BizHawkClientContext", num_received_items: int, log_items=False) -> None:
         # If the game hasn't received all items yet and the received item struct doesn't contain an item, then
