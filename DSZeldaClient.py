@@ -1615,17 +1615,32 @@ class DSZeldaClient(BizHawkClient):
         :return:
         """
 
-    async def ut_bounce_scene(self, ctx, stage, room, entrance):
-        print(f"UT Bouncing {hex(stage)} {room} {entrance}")
+    @staticmethod
+    async def store_data(ctx: "BizHawkClientContext", key, data):
         await ctx.send_msgs([{
-            "cmd": "Bounce",
-            "games": [self.game],
-            "slots": [ctx.slot],
-            "tags": ['Tracker'],
-            "data": {"stage": stage,
-                     "room": room,
-                     "entrance": entrance}
+            "cmd": "Set",
+            "key": key,
+            "default": set(),
+            "operations": [{"operation": "update", "value": list(data)}]
         }])
+
+    async def ut_bounce_scene(self, ctx, scene):
+        print(f"Storing new scene for UT {hex(scene)}")
+        await ctx.send_msgs([{
+            "cmd": "Set",
+            "key": f"{ctx.slot}_{ctx.team}_UT_MAP",
+            "default": 0,
+            "operations": [{"operation": "set", "value": scene}]
+        }])
+        # await ctx.send_msgs([{
+        #     "cmd": "Bounce",
+        #     "games": [self.game],
+        #     "slots": [ctx.slot],
+        #     "tags": ['Tracker'],
+        #     "data": {"stage": stage,
+        #              "room": room,
+        #              "entrance": entrance}
+        # }])
 
     def dungeon_hints(self, ctx):
         """
