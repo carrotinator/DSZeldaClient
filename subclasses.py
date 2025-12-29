@@ -38,7 +38,7 @@ class DSTransition:
         if self.room:
             return self.stage * 0x100 + self.room
         else:
-            return self.stage << 2
+            return self.stage << 8
 
     def get_exit_scene(self):
         if self.exit:

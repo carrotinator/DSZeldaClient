@@ -385,7 +385,7 @@ class DSZeldaClient(BizHawkClient):
                 self._backup_coord_read = await self.get_coords(ctx, multi=True)
 
                 # Send data to tracker
-                await self.ut_bounce_scene(ctx, current_stage, current_room, current_entrance)
+                await self.ut_bounce_scene(ctx, current_scene)
 
                 # Set dynamic flags on scene
                 await self._reset_dynamic_flags(ctx)
@@ -1625,12 +1625,14 @@ class DSZeldaClient(BizHawkClient):
         }])
 
     async def ut_bounce_scene(self, ctx, scene):
+        if ctx.slot_data.get("shuffle_overworld_transitions", False):
+            scene |= 1 << 16
         print(f"Storing new scene for UT {hex(scene)}")
         await ctx.send_msgs([{
             "cmd": "Set",
             "key": f"{ctx.slot}_{ctx.team}_UT_MAP",
             "default": 0,
-            "operations": [{"operation": "set", "value": scene}]
+            "operations": [{"operation": "replace", "value": scene}]
         }])
         # await ctx.send_msgs([{
         #     "cmd": "Bounce",
