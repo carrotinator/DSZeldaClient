@@ -704,6 +704,7 @@ class DSZeldaClient(BizHawkClient):
                         defer_entrance = True
                     else:
                         e_write_list, res = post_process(detect_data)
+                        defer_entrance = True  # Testing an always defer system
                     break
 
         # Unrandomized entrances can still have bounce conditions
