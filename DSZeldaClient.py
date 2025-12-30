@@ -704,7 +704,8 @@ class DSZeldaClient(BizHawkClient):
                         defer_entrance = True
                     else:
                         e_write_list, res = post_process(detect_data)
-                        defer_entrance = True  # Testing an always defer system
+                        if ctx.slot_data.get("ut_blocked_entrances_behaviour", 0) in [0, 2]:
+                            defer_entrance = True
                     break
 
         # Unrandomized entrances can still have bounce conditions
