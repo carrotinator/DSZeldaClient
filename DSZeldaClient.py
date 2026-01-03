@@ -1618,12 +1618,12 @@ class DSZeldaClient(BizHawkClient):
         """
 
     @staticmethod
-    async def store_data(ctx: "BizHawkClientContext", key, data):
+    async def store_data(ctx: "BizHawkClientContext", key, data, operation="update"):
         await ctx.send_msgs([{
             "cmd": "Set",
             "key": key,
             "default": set(),
-            "operations": [{"operation": "update", "value": list(data)}]
+            "operations": [{"operation": operation, "value": list(data)}]
         }])
 
     async def ut_bounce_scene(self, ctx, scene):
