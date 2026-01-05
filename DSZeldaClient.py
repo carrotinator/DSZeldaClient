@@ -644,7 +644,7 @@ class DSZeldaClient(BizHawkClient):
     async def _entrance_warp(self, ctx, going_to, entrance=0):
         e_write_list = []
         res = ((going_to & 0xFF00) >> 8, going_to & 0xFF, entrance)
-        defer_entrance = False
+        defer_entrance = None
 
         def write_entrance(s, r, e):
             return [(self.scene_addr[0], split_bits(s, 4), "Main RAM"),
@@ -701,11 +701,11 @@ class DSZeldaClient(BizHawkClient):
                     if await self.conditional_er(ctx, exit_data):
                         print(f"Detected entrance: {detect_data} => {exit_data}")
                         e_write_list, res = post_process(exit_data)
-                        defer_entrance = True
+                        defer_entrance = "traverse"
                     else:
                         e_write_list, res = post_process(detect_data)
                         if ctx.slot_data.get("ut_blocked_entrances_behaviour", 0) in [0, 2]:
-                            defer_entrance = True
+                            defer_entrance = "check"
                     break
 
         # Unrandomized entrances can still have bounce conditions
@@ -720,7 +720,7 @@ class DSZeldaClient(BizHawkClient):
             print(f"Writing entrance warp {e_write_list}")
             await bizhawk.write(ctx.bizhawk_ctx, e_write_list)
         if defer_entrance:
-            await self.store_visited_entrances(ctx, detect_data, exit_data)
+            await self.store_visited_entrances(ctx, detect_data, exit_data, defer_entrance)
 
         return res
 
