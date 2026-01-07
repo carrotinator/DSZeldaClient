@@ -117,6 +117,8 @@ class DSTransition:
             point = data["entrance_region"] + "<=>" + data["exit_region"]
             counter.setdefault(point, 0)
             counter[point] += 1
+            if "one_way_data" in data:
+                res[name].extra_data |= data["one_way_data"]
 
             if data.get("two_way", True):
                 two_way = True
@@ -138,6 +140,9 @@ class DSTransition:
             }
             if "extra_data" in data:
                 reverse_data["extra_data"] = data["extra_data"]
+            if "reverse_one_way_data" in data:
+                reverse_data.setdefault("extra_data", {})
+                reverse_data["extra_data"] = data["reverse_one_way_data"]
             if reverse_name in res:
                 print(f"DUPLICATE ENTRANCE!!! {reverse_name}")
             res[reverse_name] = cls(reverse_name, reverse_data)
