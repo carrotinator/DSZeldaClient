@@ -190,7 +190,8 @@ class DSZeldaClient(BizHawkClient):
 
         self.tried_short_cs = False
 
-        self.precision_mode = False
+        self.precision_mode = None
+        self.precision_operation = None
 
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
         try:
@@ -325,6 +326,21 @@ class DSZeldaClient(BizHawkClient):
             ctx.watcher_timeout = 0.5
             return
 
+        # Precision mode handling
+        if self.precision_mode:
+            await bizhawk.lock(ctx.bizhawk_ctx)
+            precision_read = await read_memory_value(ctx, self.precision_mode[0], silent=True)
+            print(f"Precision read {precision_read} == {self.precision_mode[1]} mode {self.precision_mode}")
+            if precision_read == self.precision_mode[1]:
+                print(f"Precision read, not yet")
+                ctx.watcher_timeout = 0.01
+                await bizhawk.unlock(ctx.bizhawk_ctx)
+                await bizhawk.lock(ctx.bizhawk_ctx)
+                return
+            print(f"Trigger activated!")
+            self.precision_operation = self.precision_mode[2] if len(self.precision_mode) > 2 else "wts"
+            self.precision_mode = None
+
         # Enable "DeathLink" tag if option was enabled
         if self._set_deathlink:
             self._set_deathlink = False
@@ -336,8 +352,6 @@ class DSZeldaClient(BizHawkClient):
             self._loaded_menu_read_list = True
 
         try:
-            # if self.precision_mode:
-            #     pass
 
             # Read main read list
             read_result = await read_memory_values(ctx, self.main_read_list)
@@ -362,11 +376,12 @@ class DSZeldaClient(BizHawkClient):
                 # Finished game?
                 if not ctx.finished_game:
                     await self._process_game_completion(ctx)
-                return
+                if not self.precision_operation:
+                    return
 
             # While game from main menu
             if in_game and not self._previous_game_state:
-                if not await self.watched_intro_cs(ctx):
+                if not self.precision_operation and not await self.watched_intro_cs(ctx):
                     print("In Intro CS")
                     return
                 self._just_entered_game = True
@@ -398,7 +413,7 @@ class DSZeldaClient(BizHawkClient):
             await self.process_read_list(ctx, read_result)
 
             # Process on new room. As soon as it's triggered, changing the scene variable changes entrance destination
-            if current_scene != self.last_scene and not self._entered_entrance and not self._loading_scene:
+            if (current_scene != self.last_scene and not self._entered_entrance and not self._loading_scene) or self.precision_operation == "wts":
                 # Trigger a different entrance to vanilla
                 current_stage, current_room, current_entrance = await self._entrance_warp(ctx, current_scene, current_entrance)
                 current_scene = current_stage * 0x100 + current_room
@@ -570,7 +585,9 @@ class DSZeldaClient(BizHawkClient):
                         self._entered_entrance = False
                         print("Missed loading read, using backup")
 
-            # await bizhawk.unlock(ctx.bizhawk_ctx)
+            if self.precision_operation:
+                await bizhawk.unlock(ctx.bizhawk_ctx)
+                self.precision_operation = None
 
         except bizhawk.RequestFailedError:
             # Exit handler and return to main loop to reconnect
@@ -605,15 +622,15 @@ class DSZeldaClient(BizHawkClient):
                     # Create map from scene to entrance dataclass
                     res.setdefault(data.scene, {})
                     res[data.scene][data] = exit_data
-                    print(f"Creating scene data {hex(data.scene)}: {data} => {exit_data}")
+                    # print(f"Creating scene data {hex(data.scene)}: {data} => {exit_data}")
                     res = self.add_special_er_data(ctx, res, data.scene, data, exit_data)
 
             self.er_map = res
-            print(f"ER Map:")
-            for scene, data in self.er_map.items():
-                print(f"\t{hex(scene)}")
-                for d2, d3 in data.items():
-                    print(f"\t\t{d2} => {d3}")
+            # print(f"ER Map:")
+            # for scene, data in self.er_map.items():
+            #     print(f"\t{hex(scene)}")
+            #     for d2, d3 in data.items():
+            #         print(f"\t\t{d2} => {d3}")
 
 
 
@@ -704,15 +721,15 @@ class DSZeldaClient(BizHawkClient):
             d.debug_print()
             return write_er(d), new_entrance
 
-        # if self.precision_mode:
-        #     self.warp_to_start_flag = True
-        #     self.starting_entrance = (0xF, 0x0, 0)
-        #     self.precision_mode = False
+        if self.precision_operation == "wts":
+            print(f"Precision Warp to start")
+            self.warp_to_start_flag = True
+            self.starting_entrance = (0xD, 0x0, 0)
         # Warp to start
         if self.warp_to_start_flag:
             self.warp_to_start_flag = False
             home = self.starting_entrance[0]*0x100 + self.starting_entrance[1]
-            if home != self.last_scene:
+            if home != self.last_scene or self.precision_operation == "wts":
                 e_write_list += write_entrance(*self.starting_entrance)
                 res = self.starting_entrance
                 self.current_stage = self.starting_entrance[0]
