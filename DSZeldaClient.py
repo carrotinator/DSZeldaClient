@@ -190,6 +190,8 @@ class DSZeldaClient(BizHawkClient):
 
         self.tried_short_cs = False
 
+        self.precision_mode = False
+
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
         try:
             if not await self.check_game_version(ctx):
@@ -251,6 +253,15 @@ class DSZeldaClient(BizHawkClient):
         """
         pass
 
+    async def refill_ammo(self, ctx, text=""):
+        """
+        full heals the player. Called when getting heart containers, but can be called elsewhere too
+        :param ctx:
+        :param text: change what text gets displayed on context
+        :return:
+        """
+        pass
+
     async def watched_intro_cs(self, ctx):
         """
         you know how it's random whether niko talks or not at the beginning?
@@ -296,6 +307,14 @@ class DSZeldaClient(BizHawkClient):
         """
         return False
 
+    async def process_in_menu(self, ctx):
+        """
+        Called while in menu
+        :param ctx:
+        :return:
+        """
+        pass
+
     async def game_watcher(self, ctx: "BizHawkClientContext") -> None:
         if not ctx.server or not ctx.server.socket.open or ctx.server.socket.closed or ctx.slot is None or ctx.slot == 0:
             self._just_entered_game = True
@@ -317,6 +336,9 @@ class DSZeldaClient(BizHawkClient):
             self._loaded_menu_read_list = True
 
         try:
+            # if self.precision_mode:
+            #     pass
+
             # Read main read list
             read_result = await read_memory_values(ctx, self.main_read_list)
             self.read_result = read_result
@@ -334,6 +356,7 @@ class DSZeldaClient(BizHawkClient):
             if not in_game or current_stage not in STAGES:
                 self._previous_game_state = False
                 self._from_menu = True
+                await self.process_in_menu(ctx)
                 ctx.watcher_timeout = 0.5
                 print("NOT IN GAME")
                 # Finished game?
@@ -547,6 +570,8 @@ class DSZeldaClient(BizHawkClient):
                         self._entered_entrance = False
                         print("Missed loading read, using backup")
 
+            # await bizhawk.unlock(ctx.bizhawk_ctx)
+
         except bizhawk.RequestFailedError:
             # Exit handler and return to main loop to reconnect
             print("Couldn't read data")
@@ -679,6 +704,10 @@ class DSZeldaClient(BizHawkClient):
             d.debug_print()
             return write_er(d), new_entrance
 
+        # if self.precision_mode:
+        #     self.warp_to_start_flag = True
+        #     self.starting_entrance = (0xF, 0x0, 0)
+        #     self.precision_mode = False
         # Warp to start
         if self.warp_to_start_flag:
             self.warp_to_start_flag = False
@@ -688,6 +717,7 @@ class DSZeldaClient(BizHawkClient):
                 res = self.starting_entrance
                 self.current_stage = self.starting_entrance[0]
                 logger.info("Warping to Start")
+                await self.refill_ammo(ctx)
             else:
                 logger.info("Warp to start failed, warping from home scene")
 
