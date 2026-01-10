@@ -1250,8 +1250,8 @@ class DSZeldaClient(BizHawkClient):
                     item_value = min(item_value, 9999)
                 if "size" in item_data:
                     item_value = split_bits(item_value, item_data["size"])
-                if "max" in item_data:
-                    item_value = min(item_data["max"], item_value)
+                if "max" in item_data and item_value > item_data["max"]:
+                    item_value = min(item_data["max"], prev_value)
             elif "progressive" in item_data:
                 if "progressive_overwrite" in item_data and prog_received >= 1:
                     item_value = item_value  # Bomb upgrades need to overwrite of everything breaks
