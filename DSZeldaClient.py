@@ -208,7 +208,7 @@ class DSZeldaClient(BizHawkClient):
         ctx.game = self.game
         ctx.items_handling = 0b111
         ctx.want_slot_data = True
-        ctx.watcher_timeout = 0.5
+        ctx.watcher_timeout = 0.4
         print(f"validation: {ctx.game}, {ctx.items_handling}")
         return True
 
@@ -316,6 +316,19 @@ class DSZeldaClient(BizHawkClient):
         """
         pass
 
+    async def precision_backup(self, ctx, precision_read):
+        """
+        Check for false cases after triggering a precision read
+        :param ctx:
+        :return: True to cancel precision
+        """
+
+    def clear_variables(self):
+        """
+        Called if not connected to the server. For clearing variables when switching slots
+        :return:
+        """
+
     async def game_watcher(self, ctx: "BizHawkClientContext") -> None:
         if not ctx.server or not ctx.server.socket.open or ctx.server.socket.closed or ctx.slot is None or ctx.slot == 0:
             self._just_entered_game = True
@@ -323,7 +336,8 @@ class DSZeldaClient(BizHawkClient):
             self.last_scene = None
             self._from_menu = True
             self.er_in_scene = None
-            ctx.watcher_timeout = 0.5
+            self.clear_variables()
+            ctx.watcher_timeout = 0.4
             return
 
         # Precision mode handling
@@ -338,7 +352,10 @@ class DSZeldaClient(BizHawkClient):
                 await bizhawk.lock(ctx.bizhawk_ctx)
                 return
             print(f"Trigger activated!")
-            self.precision_operation = self.precision_mode[2] if len(self.precision_mode) > 2 else "wts"
+            if await self.precision_backup(ctx, precision_read):
+                await bizhawk.unlock(ctx.bizhawk_ctx)
+            else:
+                self.precision_operation = self.precision_mode[2:] if len(self.precision_mode) > 2 else "wts"
             self.precision_mode = None
 
         # Enable "DeathLink" tag if option was enabled
@@ -371,7 +388,7 @@ class DSZeldaClient(BizHawkClient):
                 self._previous_game_state = False
                 self._from_menu = True
                 await self.process_in_menu(ctx)
-                ctx.watcher_timeout = 0.5
+                ctx.watcher_timeout = 0.4
                 print("NOT IN GAME")
                 # Finished game?
                 if not ctx.finished_game:
@@ -413,7 +430,7 @@ class DSZeldaClient(BizHawkClient):
             await self.process_read_list(ctx, read_result)
 
             # Process on new room. As soon as it's triggered, changing the scene variable changes entrance destination
-            if (current_scene != self.last_scene and not self._entered_entrance and not self._loading_scene) or self.precision_operation == "wts":
+            if (current_scene != self.last_scene and not self._entered_entrance and not self._loading_scene) or self.precision_operation:
                 # Trigger a different entrance to vanilla
                 current_stage, current_room, current_entrance = await self._entrance_warp(ctx, current_scene, current_entrance)
                 current_scene = current_stage * 0x100 + current_room
@@ -721,10 +738,16 @@ class DSZeldaClient(BizHawkClient):
             d.debug_print()
             return write_er(d), new_entrance
 
-        if self.precision_operation == "wts":
-            print(f"Precision Warp to start")
-            self.warp_to_start_flag = True
-            self.starting_entrance = (0xD, 0x0, 0)
+        # Precision Warp
+        if self.precision_operation:
+            print(f"isinstance list {isinstance(self.precision_operation, list)}")
+            if self.precision_operation == "wts":
+                print(f"Precision Warp to start")
+                self.warp_to_start_flag = True
+            elif isinstance(self.precision_operation, list):
+                if self.precision_operation[0] == "warp":
+                    e_write_list += write_er(self.precision_operation[1])
+
         # Warp to start
         if self.warp_to_start_flag:
             self.warp_to_start_flag = False
@@ -889,7 +912,9 @@ class DSZeldaClient(BizHawkClient):
             detect_data = data["detect_data"]
             if data["exit_data"] is None:
                 if data["destination"] == "_connected_dungeon_entrance":
-                    self.er_in_scene[detect_data] = self.update_boss_warp(ctx, self.current_stage, scene)
+                    dung_entr = self.update_boss_warp(ctx, self.current_stage, scene)
+                    if dung_entr is not None:
+                        self.er_in_scene[detect_data] = dung_entr
             else:
                 self.er_in_scene[detect_data] = data["exit_data"]
             print(f"\t{detect_data} => {data['exit_data']}")
@@ -1665,12 +1690,15 @@ class DSZeldaClient(BizHawkClient):
         """
 
     @staticmethod
-    async def store_data(ctx: "BizHawkClientContext", key, data, operation="update"):
+    async def store_data(ctx: "BizHawkClientContext", key, data, operation="update", default=None):
+        default = list() if default is None else default
+        data = list(data) if isinstance(data, set) else data
+        print(f"Storing data: {key} {operation} {data} {default}")
         await ctx.send_msgs([{
             "cmd": "Set",
             "key": key,
-            "default": set(),
-            "operations": [{"operation": operation, "value": list(data)}]
+            "default": default,
+            "operations": [{"operation": operation, "value": data}]
         }])
 
     async def ut_bounce_scene(self, ctx, scene):
