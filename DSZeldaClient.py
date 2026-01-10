@@ -740,7 +740,6 @@ class DSZeldaClient(BizHawkClient):
 
         # Precision Warp
         if self.precision_operation:
-            print(f"isinstance list {isinstance(self.precision_operation, list)}")
             if self.precision_operation == "wts":
                 print(f"Precision Warp to start")
                 self.warp_to_start_flag = True
