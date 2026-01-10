@@ -733,7 +733,7 @@ class DSZeldaClient(BizHawkClient):
                 e_write_list += write_entrance(*self.starting_entrance)
                 res = self.starting_entrance
                 self.current_stage = self.starting_entrance[0]
-                logger.info("Warping to Start")
+                logger.info("Warping to Start and Refilling Ammo")
                 await self.refill_ammo(ctx)
             else:
                 logger.info("Warp to start failed, warping from home scene")
@@ -1267,8 +1267,8 @@ class DSZeldaClient(BizHawkClient):
                     item_value = min(item_value, 9999)
                 if "size" in item_data:
                     item_value = split_bits(item_value, item_data["size"])
-                if "max" in item_data:
-                    item_value = min(item_data["max"], item_value)
+                if "max" in item_data and item_value > item_data["max"]:
+                    item_value = min(item_data["max"], prev_value)
             elif "progressive" in item_data:
                 if "progressive_overwrite" in item_data and prog_received >= 1:
                     item_value = item_value  # Bomb upgrades need to overwrite of everything breaks
