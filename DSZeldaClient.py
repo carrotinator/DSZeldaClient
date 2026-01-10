@@ -716,7 +716,7 @@ class DSZeldaClient(BizHawkClient):
                 e_write_list += write_entrance(*self.starting_entrance)
                 res = self.starting_entrance
                 self.current_stage = self.starting_entrance[0]
-                logger.info("Warping to Start")
+                logger.info("Warping to Start and Refilling Ammo")
                 await self.refill_ammo(ctx)
             else:
                 logger.info("Warp to start failed, warping from home scene")
