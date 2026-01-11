@@ -1413,6 +1413,7 @@ class DSZeldaClient(BizHawkClient):
                         if "give_ammo" in data:
                             ammo_v = data["give_ammo"][min(max(index - 1, 0), len(data["give_ammo"])-1)]
                             write_list.append((data["ammo_address"], [ammo_v], "Main RAM"))
+                            logger.info(f"You have the max amount of {item}")
                         # Progressive overwrite fix
                         if "progressive_overwrite" in data and index > 1:
                             write_list.append((data["progressive"][index-1][0], [data["progressive"][index-1][1]], "Main RAM"))
