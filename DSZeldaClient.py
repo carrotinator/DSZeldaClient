@@ -308,7 +308,7 @@ class DSZeldaClient(BizHawkClient):
         """
         return False
 
-    async def process_in_menu(self, ctx):
+    async def process_in_menu(self, ctx, read_result):
         """
         Called while in menu
         :param ctx:
@@ -387,7 +387,7 @@ class DSZeldaClient(BizHawkClient):
             if not in_game or current_stage not in STAGES:
                 self._previous_game_state = False
                 self._from_menu = True
-                await self.process_in_menu(ctx)
+                await self.process_in_menu(ctx, read_result)
                 ctx.watcher_timeout = 0.4
                 print("NOT IN GAME")
                 # Finished game?
@@ -435,6 +435,8 @@ class DSZeldaClient(BizHawkClient):
                 current_stage, current_room, current_entrance = await self._entrance_warp(ctx, current_scene, current_entrance)
                 current_scene = current_stage * 0x100 + current_room
                 self.current_entrance = current_entrance
+                self.current_scene = current_scene
+                self.current_stage = current_stage
 
                 # Backup in case of missing loading
                 self._backup_coord_read = await self.get_coords(ctx, multi=True)
@@ -759,6 +761,12 @@ class DSZeldaClient(BizHawkClient):
                 await self.refill_ammo(ctx)
             else:
                 logger.info("Warp to start failed, warping from home scene")
+
+        # Map warp
+        elif getattr(self, "map_warp", None):
+            logger.info(f"Map warping to {self.map_warp.name}")
+            e_write_list += write_er(self.map_warp)
+            self.map_warp = None
 
         elif self.er_in_scene:
 
