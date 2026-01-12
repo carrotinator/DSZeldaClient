@@ -95,6 +95,13 @@ async def get_address_from_heap(ctx, pointer, offset=0) -> int:
     print(f"Got map address @ {hex(read + offset - 0x02000000)}")
     return read + offset - 0x02000000
 
+def storage_key(ctx, key: str):
+    return f"{key}_{ctx.slot}_{ctx.team}"
+
+def get_stored_data(ctx, key, default=None):
+    store = ctx.stored_data.get(storage_key(ctx, key), default)
+    store = store if store is not None else default
+    return store
 
 class DSZeldaClient(BizHawkClient):
     local_checked_locations: Set[int]
@@ -749,7 +756,7 @@ class DSZeldaClient(BizHawkClient):
                 self.warp_to_start_flag = True
             elif isinstance(self.precision_operation, list):
                 if self.precision_operation[0] == "warp":
-                    e_write_list += write_er(self.precision_operation[1])
+                    e_write_list, res = post_process(self.precision_operation[1])
 
         # Warp to start
         if self.warp_to_start_flag:
@@ -767,8 +774,9 @@ class DSZeldaClient(BizHawkClient):
         # Map warp
         elif getattr(self, "map_warp", None):
             logger.info(f"Map warping to {self.map_warp.name}")
-            e_write_list += write_er(self.map_warp)
+            e_write_list, res = post_process(self.map_warp)
             self.map_warp = None
+
 
         elif self.er_in_scene:
 
