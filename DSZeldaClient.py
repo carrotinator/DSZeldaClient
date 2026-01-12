@@ -179,6 +179,7 @@ class DSZeldaClient(BizHawkClient):
         self.er_map: dict[int, dict["PHTransition", "PHTransition"]] = {}
         self.er_in_scene: dict["PHTransition", "PHTransition"] | None = None
         self.er_exit_coord_writes: list | None = None
+        self.visited_scenes = set()
 
         self.delay_pickup = None
         self.last_key_count = 0
@@ -192,6 +193,7 @@ class DSZeldaClient(BizHawkClient):
 
         self.precision_mode = None
         self.precision_operation = None
+
 
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
         try:
