@@ -365,6 +365,7 @@ class DSZeldaClient(BizHawkClient):
                 await bizhawk.unlock(ctx.bizhawk_ctx)
             else:
                 self.precision_operation = self.precision_mode[2:] if len(self.precision_mode) > 2 else "wts"
+                print(f"precision operation: {self.precision_operation}")
             self.precision_mode = None
 
         # Enable "DeathLink" tag if option was enabled
@@ -751,7 +752,7 @@ class DSZeldaClient(BizHawkClient):
 
         # Precision Warp
         if self.precision_operation:
-            if self.precision_operation == "wts":
+            if self.precision_operation == "wts" or "wts" in self.precision_operation:
                 print(f"Precision Warp to start")
                 self.warp_to_start_flag = True
             elif isinstance(self.precision_operation, list):
@@ -1105,13 +1106,16 @@ class DSZeldaClient(BizHawkClient):
 
                 print(f"Processing locs {loc_name}")
                 print(
-                    f"\t{location.get('x_max', 0x8FFFFFFF)} > {link_coords['x']} > {location.get('x_min', -0x8FFFFFFF)}")
+                    f"\tx: {location.get('x_max', 0x8FFFFFFF)} > {link_coords['x']} > {location.get('x_min', -0x8FFFFFFF)}")
                 print(
-                    f"\t{location.get('z_max', 0x8FFFFFFF)} > {link_coords['z']} > {location.get('z_min', -0x8FFFFFFF)}")
+                    f"\ty: {location.get('y', link_coords['y']) + 1000} > {link_coords['y']} >= {location.get('y', link_coords['y'])}")
+                print(
+                    f"\tz: {location.get('z_max', 0x8FFFFFFF)} > {link_coords['z']} > {location.get('z_min', -0x8FFFFFFF)}")
+
 
                 if (location.get("x_max", 0x8FFFFFFF) > link_coords["x"] > location.get("x_min", -0x8FFFFFFF) and
                         location.get("z_max", 0x8FFFFFFF) > link_coords["z"] > location.get("z_min", -0x8FFFFFFF) and
-                        location.get("y", link_coords["y"]) == link_coords["y"]):
+                        location.get("y", link_coords["y"]) + 1000 > link_coords["y"] >= location.get("y", link_coords["y"])):
                     # For rooms with checks that move or are close, check what you got first
                     if "delay_pickup" in location:
                         if len(self.locations_in_scene) > i + 1:
