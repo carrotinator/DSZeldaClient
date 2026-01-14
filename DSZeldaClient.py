@@ -161,6 +161,7 @@ class DSZeldaClient(BizHawkClient):
         self._loaded_menu_read_list = False  #
         self._from_menu = True  # Last scene was menu
         self._dynamic_flags_to_reset = []
+        self._was_in_cs = False
 
         self.main_read_list = {}
         self.read_result = {}
@@ -405,6 +406,15 @@ class DSZeldaClient(BizHawkClient):
                     await self._process_game_completion(ctx)
                 if not self.precision_operation:
                     return
+
+            # Reload main read list after cutscenes
+            in_cutscene = not read_result.get("in_cutscene", 1)
+            if in_cutscene: self._was_in_cs = True
+            if self._was_in_cs and not in_cutscene:
+                self._was_in_cs = False
+                await self.update_main_read_list(ctx, self.current_stage, in_game=True)
+                print(f"Reloading read list after exiting cutscene")
+                return
 
             # While game from main menu
             if in_game and not self._previous_game_state:
