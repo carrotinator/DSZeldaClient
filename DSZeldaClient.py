@@ -1350,8 +1350,8 @@ class DSZeldaClient(BizHawkClient):
 
         # Write the new item to memory!
         print("Write list:")
-        for addr, value, domain in write_list:
-            print(f"  {hex(addr)}: {value} ({domain})")
+        for addr, v, domain in write_list:
+            print(f"  {hex(addr)}: {v} ({domain})")
         # print(f"Write list: {write_list}")
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
 
