@@ -839,12 +839,12 @@ class DSZeldaClient(BizHawkClient):
         :return:
         """
 
-    async def conditional_er(self, ctx, conditions) -> bool:
+    async def conditional_er(self, ctx, exit_data, silent=False) -> bool:
         """
         for handling custom conditional ER statements.
         If return false, ER will pop you back out the entrance you came from
         :param ctx:
-        :param conditions:
+        :param exit_data:
         :return:
         """
         return True
