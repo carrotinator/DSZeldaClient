@@ -201,6 +201,7 @@ class DSZeldaClient(BizHawkClient):
 
         self.precision_mode = None
         self.precision_operation = None
+        self.heal_on_load = False
 
 
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
@@ -410,7 +411,7 @@ class DSZeldaClient(BizHawkClient):
             # Reload main read list after cutscenes
             in_cutscene = not read_result.get("in_cutscene", 1)
             if in_cutscene: self._was_in_cs = True
-            if self._was_in_cs and not in_cutscene:
+            if self._was_in_cs and not in_cutscene and self.last_stage != current_stage:
                 self._was_in_cs = False
                 await self.update_main_read_list(ctx, self.current_stage, in_game=True)
                 print(f"Reloading read list after exiting cutscene")
@@ -451,6 +452,7 @@ class DSZeldaClient(BizHawkClient):
 
             # Process on new room. As soon as it's triggered, changing the scene variable changes entrance destination
             if (current_scene != self.last_scene and not self._entered_entrance and not self._loading_scene) or self.precision_operation:
+                print(f"")  # New Scene, line space
                 # Trigger a different entrance to vanilla
                 current_stage, current_room, current_entrance = await self._entrance_warp(ctx, current_scene, current_entrance)
                 current_scene = current_stage * 0x100 + current_room
@@ -467,8 +469,6 @@ class DSZeldaClient(BizHawkClient):
                 # Set dynamic flags on scene
                 await self._reset_dynamic_flags(ctx)
                 await self._set_dynamic_flags(ctx, current_scene)
-
-
 
                 self._entered_entrance = time.time()  # Triggered first part of loading - setting new room
                 self.entering_dungeon = None
@@ -573,8 +573,8 @@ class DSZeldaClient(BizHawkClient):
             if self._entered_entrance and loading_scene:
                 self._loading_scene = True  # Second phase of loading room
                 self._entered_entrance = False
+                print(f"Loading Scene {current_scene}, setting coords {self.er_exit_coord_writes}")
                 await self._set_er_coords(ctx)
-                print("Loading Scene", current_scene)
 
             # Fully loaded room
             if self._loading_scene and not loading:
@@ -606,6 +606,9 @@ class DSZeldaClient(BizHawkClient):
                     print("Fully Loaded Stage")
                     await self._enter_stage(ctx, current_stage, current_scene)
                     await self.update_main_read_list(ctx, current_stage)
+                    if self.heal_on_load:
+                        await self.refill_ammo(ctx)
+                        self.heal_on_load = False
 
                 # Hard coded room stuff
                 await self.process_hard_coded_rooms(ctx, current_scene)
@@ -618,7 +621,7 @@ class DSZeldaClient(BizHawkClient):
 
             # In case of a short load being missed, have a backup check on coords (they stay the same during transitions)
             if self._entered_entrance and self._backup_coord_read:
-                if time.time() - self._entered_entrance > 1:
+                if time.time() - self._entered_entrance > 1.5:
                     if not loading_scene:
                         self._loading_scene = True  # Second phase of loading room
                         self._entered_entrance = False
@@ -743,7 +746,7 @@ class DSZeldaClient(BizHawkClient):
 
             if exit_d.entrance[2] > 0xFA:
                 x, y, z = exit_d.coords
-                print(f"exit coords {x} {y} {z}")
+                # print(f"exit coords {x} {y} {z}")
                 self.er_exit_coord_writes = [(self.exit_coords_addr[0], split_bits(x, 4), "Main RAM"),
                                              (self.exit_coords_addr[1], split_bits(y, 4), "Main RAM"),
                                              (self.exit_coords_addr[2], split_bits(z, 4), "Main RAM")]
@@ -777,8 +780,8 @@ class DSZeldaClient(BizHawkClient):
                 e_write_list += write_entrance(*self.starting_entrance)
                 res = self.starting_entrance
                 self.current_stage = self.starting_entrance[0]
+                self.heal_on_load = True
                 logger.info("Warping to Start and Refilling Ammo")
-                await self.refill_ammo(ctx)
             else:
                 logger.info("Warp to start failed, warping from home scene")
 
