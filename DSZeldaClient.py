@@ -1041,7 +1041,7 @@ class DSZeldaClient(BizHawkClient):
                     if not arg_lookup.get(addr, False):
                         if not (p & v_lookup[addr]):
                             return False
-                    elif "not" in arg_lookup[addr]:
+                    elif "not" in arg_lookup.get(addr, ""):
                         if p & v_lookup[addr]:
                             return False
             return True
