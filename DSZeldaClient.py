@@ -44,7 +44,7 @@ async def read_memory_values(ctx, read_list: dict[str, tuple[int, int, str]], si
 async def read_memory_value(ctx, address: int, size=1, domain="Main RAM", signed=False, silent=False) -> int:
     read_result = await bizhawk.read(ctx.bizhawk_ctx, [(address, size, domain)])
     if not silent:
-        print("Reading memory value", hex(address), size, domain, ", got value",
+        print("\tReading memory value", hex(address), size, domain, ", got value",
               hex(int.from_bytes(read_result[0], "little")))
     return int.from_bytes(read_result[0], "little", signed=signed)
 
@@ -70,7 +70,7 @@ async def write_memory_value(ctx, address: int, value: int, domain="Main RAM", i
         else:
             write_value = value
     write_value = split_bits(write_value, size)
-    print(f"Writing Memory: {hex(address)}, {write_value}, {size}, {domain}, {incr}, {unset}")
+    print(f"\tWriting Memory: {hex(address)}, {write_value}, {size}, {domain}, {incr}, {unset}")
     await bizhawk.write(ctx.bizhawk_ctx, [(address, write_value, domain)])
     return write_value
 
@@ -202,6 +202,7 @@ class DSZeldaClient(BizHawkClient):
         self.precision_mode = None
         self.precision_operation = None
         self.heal_on_load = False
+        self.precision_delay_flags = False
 
 
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
@@ -467,8 +468,9 @@ class DSZeldaClient(BizHawkClient):
                 await self.ut_bounce_scene(ctx, current_scene)
 
                 # Set dynamic flags on scene
-                await self._reset_dynamic_flags(ctx)
-                await self._set_dynamic_flags(ctx, current_scene)
+                if not self.precision_delay_flags:
+                    await self._reset_dynamic_flags(ctx)
+                    await self._set_dynamic_flags(ctx, current_scene)
 
                 self._entered_entrance = time.time()  # Triggered first part of loading - setting new room
                 self.entering_dungeon = None
@@ -535,8 +537,9 @@ class DSZeldaClient(BizHawkClient):
                         need_fallback = True
                         for location, item, value in pickups:
                             new_item_read = await self.get_item_read(ctx, item)
-                            if "Rupee" in item:
+                            if "Rupee" in item or "Rupoor" in item:
                                 if new_item_read - value == ITEMS_DATA[item]["value"]:
+                                    print(f"delay pickup rupee: {new_item_read - value} == {ITEMS_DATA[item]['value']}")
                                     await self._process_checked_locations(ctx, location, True, item=item)
                                     need_fallback = False
                             elif new_item_read != value:
@@ -582,6 +585,12 @@ class DSZeldaClient(BizHawkClient):
                 self._loading_scene = False
                 self._backup_coord_read = None
 
+                # Set dynamic flags now if precision loading
+                if self.precision_delay_flags:
+                    await self._reset_dynamic_flags(ctx)
+                    await self._set_dynamic_flags(ctx, current_scene)
+                    self.precision_delay_flags = False
+
                 # Load potential entrance warp destinations, and dynamic entrances
                 self.er_in_scene = self.er_map.get(current_scene, dict())
                 await self._set_dynamic_entrances(ctx, current_scene)
@@ -621,7 +630,7 @@ class DSZeldaClient(BizHawkClient):
 
             # In case of a short load being missed, have a backup check on coords (they stay the same during transitions)
             if self._entered_entrance and self._backup_coord_read:
-                if time.time() - self._entered_entrance > 1.5:
+                if time.time() - self._entered_entrance > 1:
                     if not loading_scene:
                         self._loading_scene = True  # Second phase of loading room
                         self._entered_entrance = False
@@ -768,9 +777,11 @@ class DSZeldaClient(BizHawkClient):
             if self.precision_operation == "wts" or "wts" in self.precision_operation:
                 print(f"Precision Warp to start")
                 self.warp_to_start_flag = True
+                self.precision_delay_flags = True
             elif isinstance(self.precision_operation, list):
                 if self.precision_operation[0] == "warp":
                     e_write_list, res = post_process(self.precision_operation[1])
+                    self.precision_delay_flags = True
 
         # Warp to start
         if self.warp_to_start_flag:
@@ -797,7 +808,7 @@ class DSZeldaClient(BizHawkClient):
             # Determine Entrance Warp
             coords = await self.get_coords(ctx)
             for detect_data, exit_data in self.er_in_scene.items():
-                print(f"trying to detect ER {res} {detect_data.entrance} {detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest)}")
+                # print(f"trying to detect ER {res} {detect_data.entrance} {detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest)}")
                 if detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest):
                     if await self.conditional_er(ctx, exit_data):
                         print(f"Detected entrance: {detect_data} => {exit_data}")
@@ -1196,6 +1207,9 @@ class DSZeldaClient(BizHawkClient):
                 delay_item_check = [delay_item_check]
             for item in delay_item_check:
                 self.delay_pickup[1].append([loc, item, await self.get_item_read(ctx, item)])
+                if "Potion" in item:
+                    overflow_item = ITEMS_DATA[item]["overflow_item"]
+                    self.delay_pickup[1].append([loc, overflow_item, await self.get_item_read(ctx, overflow_item)])
         print(f"Delay pickup {self.delay_pickup}")
     # Processes events defined in data\dynamic_flags.py
 
