@@ -1,4 +1,94 @@
 from enum import IntEnum
+from typing import TYPE_CHECKING
+import worlds._bizhawk as bizhawk
+
+if TYPE_CHECKING:
+    try:
+        from ..Client import PhantomHourglassClient
+    except ImportError:
+        pass
+
+# Read list of address data
+async def read_memory_values(ctx, read_list: dict[str, tuple[int, int, str]], signed=False) -> dict[str, int]:
+    keys = read_list.keys()
+    read_data = [(a, s, d) for a, s, d in read_list.values()]
+    read_result = await bizhawk.read(ctx.bizhawk_ctx, read_data)
+    values = [int.from_bytes(i, "little", signed=signed) for i in read_result]
+    return {key: value for key, value in zip(keys, values)}
+
+
+# Read single address
+async def read_memory_value(ctx, address: int, size=1, domain="Main RAM", signed=False, silent=False) -> int:
+    read_result = await bizhawk.read(ctx.bizhawk_ctx, [(address, size, domain)])
+    if not silent:
+        print("\tReading memory value", hex(address), size, domain, ", got value",
+              hex(int.from_bytes(read_result[0], "little")))
+    return int.from_bytes(read_result[0], "little", signed=signed)
+
+
+# Write single address
+async def write_memory_value(ctx, address: int, value: int, domain="Main RAM", incr=None, size=1, unset=False,
+                             overwrite=False):
+    prev = await read_memory_value(ctx, address, size, domain)
+    if incr is not None:
+        value = -value if unset else value
+        if incr:
+            write_value = prev + value
+        else:
+            write_value = prev - value
+        write_value = 0 if write_value <= 0 else write_value
+    else:
+        if unset:
+            print(f"Unseting bit {hex(address)} {hex(value)} with filter {hex(~value)} from prev {hex(prev)} "
+                  f"for result {hex(prev & (~value))}")
+            write_value = prev & (~value)
+        elif not overwrite:
+            write_value = prev | value
+        else:
+            write_value = value
+    write_value = split_bits(write_value, size)
+    print(f"\tWriting Memory: {hex(address)}, {write_value}, {size}, {domain}, {incr}, {unset}")
+    await bizhawk.write(ctx.bizhawk_ctx, [(address, write_value, domain)])
+    return write_value
+
+
+# Write list of values starting from address
+async def write_memory_values(ctx, address: int, values: list, domain="Main RAM", overwrite=False, size=4):
+    if not overwrite:
+        prev = await read_memory_value(ctx, address, len(values), domain)
+        new_values = [old | new for old, new in zip(split_bits(prev, size), values)]
+        print(f"\tvalues: {new_values}, old: {split_bits(prev, size)}")
+    else:
+        new_values = values
+    await bizhawk.write(ctx.bizhawk_ctx, [(address, new_values, domain)])
+
+
+# Get address from pointer
+async def get_address_from_heap(ctx, pointer, offset=0) -> int:
+    m_course = 0
+    while m_course == 0:
+        m_course = await read_memory_value(ctx, pointer, 4, domain="Data TCM")
+    read = await read_memory_value(ctx, m_course - 0x02000000, 4)
+    print(f"Got map address @ {hex(read + offset - 0x02000000)}")
+    return read + offset - 0x02000000
+
+def storage_key(ctx, key: str):
+    return f"{key}_{ctx.slot}_{ctx.team}"
+
+def get_stored_data(ctx, key, default=None):
+    store = ctx.stored_data.get(storage_key(ctx, key), default)
+    store = store if store is not None else default
+    return store
+
+# Split up large values to write into smaller chunks
+def split_bits(value, size):
+    ret = []
+    f = 0xFFFFFFFFFFFFFF00
+    for _ in range(size):
+        ret.append(value & 0xFF)
+        value = (value & f) >> 8
+    return ret
+
 
 class DSTransition:
     """
