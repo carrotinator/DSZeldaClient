@@ -122,8 +122,7 @@ class DSZeldaClient(BizHawkClient):
         self.precision_delay_flags = False
 
     def item_count(self, ctx, item_name, items_received=-1) -> int:
-        items_received = len(ctx.items_received) if items_received == -1 else items_received
-        return sum([1 for i in ctx.items_received[:items_received] if i.item == self.item_data[item_name].id])
+        return self.item_data[item_name].get_count(ctx, items_received)
 
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
         try:

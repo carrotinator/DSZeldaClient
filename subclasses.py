@@ -89,6 +89,34 @@ def split_bits(value, size):
         value = (value & f) >> 8
     return ret
 
+class Address:
+    addr_eu: int
+    addr_us: int
+    domain: str
+    size: int
+
+    def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM"):
+        self.addr_eu = addr_eu
+        self.addr_us = addr_us
+
+    def get_address(self, region="eu"):
+        if region == "eu":
+            return self.addr_eu
+        elif region == "us":
+            return self.addr_us
+        return None
+
+    def get_read_list(self, region="eu"):
+        return [(self.get_address(region), self.size, self.domain)]
+
+    def get_write_list(self, region="eu", value=1):
+        return [(self.get_address(region), split_bits(value, self.size), self.domain)]
+
+    async def get_value(self, ctx, region="eu", silent=True):
+        return await read_memory_value(ctx, self.get_address(region), self.size, self.domain, silent=silent)
+
+    def __repr__(self, region="eu"):
+        return hex(self.get_address(region))
 
 class DSTransition:
     """

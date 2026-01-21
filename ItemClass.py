@@ -166,12 +166,12 @@ class DSItem:
     # Tags and flags
     dummy: bool
     tags: list[str]
-    always_process: bool  # process item removal even when vanilla # TODO: Make tag
-    incremental: bool  # TODO: Make tag
-    ship_part: bool  # TODO: Make tag. only used for technical ship part
-    treasure: bool  # TODO: make tag
-    progressive_overwrite: bool  # for progressive items that error if you keep the old bits
-    backup_filler: bool  # TODO: Make tag
+    # always_process: bool  # process item removal even when vanilla
+    # incremental: bool
+    # ship_part: bool
+    # treasure: bool
+    # progressive_overwrite: bool  # for progressive items that error if you keep the old bits
+    # backup_filler: bool
 
     overflow_item: str
     max: int  # only used for salvage, and is weird there.
@@ -180,9 +180,10 @@ class DSItem:
     disconnect_entrances: list[str]  # list of entrances to attempt to disconnect on receive
     hint_on_receive: list[str]  # list of items to hint for on receive
 
-    def __init__(self, name, data):
+    def __init__(self, name, data, all_items):
         self.data = data
         self.name: str = name
+        self.all_items = all_items
 
         self.value = 1
         self.size = 1
@@ -219,6 +220,10 @@ class DSItem:
 
     def remove_vanilla(self, client: "DSZeldaClient", ctx: "BizHawkClientContext", num_received_items):
         return self.remove_vanilla_func(client, ctx, self, num_received_items)
+
+    def get_count(self, ctx, items_received=-1) -> int:
+        items_received = len(ctx.items_received) if items_received == -1 else items_received
+        return sum([1 for i in ctx.items_received[:items_received] if i.item == self.id])
 
     def post_process(self, client: "DSZeldaClient", ctx: "BizHawkClientContext"):
         return
