@@ -1,4 +1,5 @@
 from enum import IntEnum
+from operator import index
 from typing import TYPE_CHECKING
 import worlds._bizhawk as bizhawk
 
@@ -103,25 +104,36 @@ class Address:
     def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM"):
         self.addr_eu = addr_eu
         self.addr_us = addr_us
-        self.current_region = "eu"
+        self.addr_lookup = [addr_eu, addr_us]
+        self.current_region = 0
         self.addr = addr_eu
+
         self.all_addresses.append(self)
+        print(all_addresses)
 
     def set_region(self, region):
-        self.current_region = region
-        self.addr = self.addr_eu if region == "eu" else self.addr_us
+        self.current_region = self._region_int(region)
+        self.addr = self.addr_lookup[self.current_region]
+
+    @staticmethod
+    def _region_int(region):
+        if isinstance(region, str):
+            assert region.lower() in ["eu", "us"]
+            region = ["eu", "us"].index(region.lower())
+        assert region in [0, 1]
+        return region
 
     def get_address(self, region=None):
-        if region is None: return self.addr
-        if region == "eu": return self.addr_eu
-        if region == "us": return self.addr_us
-        else: return None
+        if region is not None:
+            region = self._region_int(region)
+            return self.addr_lookup[region]
+        return self.addr
 
-    def get_read_list(self, region="eu"):
-        return [(self.get_address(region), self.size, self.domain)]
+    def get_read_list(self):
+        return [(self.addr, self.size, self.domain)]
 
-    def get_write_list(self, region="eu", value=1):
-        return [(self.get_address(region), split_bits(value, self.size), self.domain)]
+    def get_write_list(self, value):
+        return [(self.addr, split_bits(value, self.size), self.domain)]
 
     async def get_value(self, ctx, region="eu", silent=True):
         return await read_memory_value(ctx, self.get_address(region), self.size, self.domain, silent=silent)
@@ -131,6 +143,34 @@ class Address:
 
     def __str__(self):
         return hex(self.get_address())
+
+    async def read(self, ctx, signed=False):
+        read_result = await bizhawk.read(ctx.bizhawk_ctx, [(self.addr, self.size, self.domain)])
+        return int.from_bytes(read_result[0], "little", signed=signed)
+
+    async def overwrite(self, ctx, value):
+        return await bizhawk.write(ctx.bizhawk_ctx, [(self.addr, split_bits(value, self.size), self.domain)])
+
+    async def add(self, ctx, value):
+        prev = await self.read(ctx)
+        return self.overwrite(ctx, prev + value)
+
+    async def set_bits(self, ctx, value):
+        prev = await self.read(ctx)
+        return self.overwrite(ctx, prev | value)
+
+    def __add__(self, other):
+        return self.addr + other
+
+    def __sub__(self, other):
+        return self.addr - other
+
+    def __eq__(self, other):
+        return self.addr == other
+
+    def __ne__(self, other):
+        return self.addr != other
+
 class DSTransition:
     """
     Datastructures for dealing with Transitions on the client side.
