@@ -99,14 +99,19 @@ class Address:
     region: str
     domain: str
     size: int
+    offset: int
     all_addresses: list = all_addresses
 
-    def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM"):
-        self.addr_eu = addr_eu
-        self.addr_us = addr_us
-        self.addr_lookup = [addr_eu, addr_us]
+    def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM", offset=0):
+        self.addr_eu = addr_eu + offset
+        self.addr_us = addr_us + offset
+        self.addr_lookup = [self.addr_eu, self.addr_us]
+        self.addr = self.addr_eu
+
         self.current_region = 0
-        self.addr = addr_eu
+        self.domain = domain
+        self.size = size
+        self.offset = offset
 
         self.all_addresses.append(self)
         print(all_addresses)
@@ -135,29 +140,31 @@ class Address:
     def get_write_list(self, value):
         return [(self.addr, split_bits(value, self.size), self.domain)]
 
-    async def get_value(self, ctx, region="eu", silent=True):
-        return await read_memory_value(ctx, self.get_address(region), self.size, self.domain, silent=silent)
+    async def read(self, ctx, signed=False, silent=False):
+        read_result = await bizhawk.read(ctx.bizhawk_ctx, [(self.addr, self.size, self.domain)])
+        res = int.from_bytes(read_result[0], "little", signed=signed)
+        if not silent:
+            print(f"\tReading address {self}, got value {hex(res)}")
+        return res
+
+    async def overwrite(self, ctx, value, silent=False):
+        if not silent:
+            print(f"\tWriting to address {self} with value {hex(value)}")
+        return await bizhawk.write(ctx.bizhawk_ctx, [(self.addr, split_bits(value, self.size), self.domain)])
+
+    async def add(self, ctx, value, silent=False):
+        prev = await self.read(ctx, silent=silent)
+        return self.overwrite(ctx, prev + value, silent=silent)
+
+    async def set_bits(self, ctx, value, silent=False):
+        prev = await self.read(ctx, silent=silent)
+        return self.overwrite(ctx, prev | value, silent=silent)
 
     def __repr__(self, region="eu"):
         return f"Address Object {hex(self.get_address(region))}"
 
     def __str__(self):
         return hex(self.get_address())
-
-    async def read(self, ctx, signed=False):
-        read_result = await bizhawk.read(ctx.bizhawk_ctx, [(self.addr, self.size, self.domain)])
-        return int.from_bytes(read_result[0], "little", signed=signed)
-
-    async def overwrite(self, ctx, value):
-        return await bizhawk.write(ctx.bizhawk_ctx, [(self.addr, split_bits(value, self.size), self.domain)])
-
-    async def add(self, ctx, value):
-        prev = await self.read(ctx)
-        return self.overwrite(ctx, prev + value)
-
-    async def set_bits(self, ctx, value):
-        prev = await self.read(ctx)
-        return self.overwrite(ctx, prev | value)
 
     def __add__(self, other):
         return self.addr + other
@@ -170,6 +177,9 @@ class Address:
 
     def __ne__(self, other):
         return self.addr != other
+
+    def __bool__(self):
+        return bool(self.addr)
 
 class DSTransition:
     """

@@ -11,11 +11,13 @@ from ..Util import *
 
 from .subclasses import (read_memory_value, read_memory_values, write_memory_value, write_memory_values,
                          split_bits, get_address_from_heap, storage_key, get_stored_data)
+from ..data.Addresses import *
 
 if TYPE_CHECKING:
     from worlds._bizhawk.context import BizHawkClientContext
     from ..data.Entrances import PHTransition
     from .ItemClass import DSItem
+    from .subclasses import Address
 
 logger = logging.getLogger("Client")
 
@@ -89,7 +91,7 @@ class DSZeldaClient(BizHawkClient):
         self.entering_dungeon = None
         self.current_entrance = None
 
-        self.stage_address = 0  # Used for scene flags
+        self.stage_address = addr_null  # Used for scene flags
         self.new_stage_loading = None
 
         self.getting_location_type = None
@@ -108,8 +110,7 @@ class DSZeldaClient(BizHawkClient):
 
         self.delay_pickup = None
         self.last_key_count = 0
-        self.key_address = 0
-        self.key_value = 0
+        self.key_address: "Address" = addr_null
         self.metal_count = 0
 
         self.last_dungeon_warp_target = None
@@ -222,13 +223,13 @@ class DSZeldaClient(BizHawkClient):
                 "create_as_hint": int(2)
             }])
 
-    async def get_small_key_address(self, ctx) -> int:
+    async def get_small_key_address(self, ctx) -> "Address":
         """
         in ph small keys are tied to map data, in st there is a consistent address for them
         :param ctx:
         :return:
         """
-        return 0
+        return addr_null
 
     def process_loading_variable(self, read_result) -> bool:
         """
@@ -274,7 +275,7 @@ class DSZeldaClient(BizHawkClient):
         # Precision mode handling
         if self.precision_mode:
             await bizhawk.lock(ctx.bizhawk_ctx)
-            precision_read = await read_memory_value(ctx, self.precision_mode[0], silent=True)
+            precision_read = await self.precision_mode[0].read(ctx, silent=True)
             print(f"Precision read {precision_read} == {self.precision_mode[1]} mode {self.precision_mode}")
             if precision_read == self.precision_mode[1]:
                 print(f"Precision read, not yet")
@@ -1097,10 +1098,10 @@ class DSZeldaClient(BizHawkClient):
 
     async def get_item_read(self, ctx, item_name: str) -> int:
         if "Small Key" in item_name:
-            return await read_memory_value(ctx, self.key_address)
+            return await self.key_address.read(ctx)
         else:
             item = self.item_data[item_name]
-            return await read_memory_value(ctx, item.address, item.size)
+            return await item.address.read(ctx)
 
     async def _set_delay_pickup(self, ctx, loc_name, location):
         delay_locations = []

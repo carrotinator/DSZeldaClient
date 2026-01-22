@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from BaseClasses import ItemClassification
     from worlds._bizhawk.context import BizHawkClientContext
     from .DSZeldaClient import DSZeldaClient
+    from .subclasses import Address
 
 
 # Handle Small Keys
@@ -14,19 +15,19 @@ async def receive_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext"
     res = []
     async def write_keys_to_storage(dungeon) -> tuple[int, list, str]:
         key_data = DUNGEON_KEY_DATA[dungeon]  # TODO: Add dungeon key data to item_data
-        prev = await read_memory_value(ctx, key_data["address"])
+        prev = await key_data["address"].read(ctx)
         bit_filter = key_data["filter"]
         new_v = prev | bit_filter if (prev & bit_filter) + key_data[
             "value"] > bit_filter else prev + key_data["value"]
         print(f"Writing {key_data['name']} key to storage: {hex(prev)} -> {hex(new_v)}")
-        return key_data["address"], [new_v], item.domain
+        return key_data["address"].get_write_list(new_v)
 
     # Get key in own dungeon
     if client.current_stage == item.dungeon:
         print("In dungeon! Getting Key")
-        client.key_value = await read_memory_value(ctx, client.key_address)
-        client.key_value = 7 if client.key_value > 7 else client.key_value
-        res.append((client.key_address, [client.key_value + 1], item.domain))
+        key_value = await client.key_address.read(ctx)
+        key_value = 7 if key_value > 7 else key_value
+        res += client.key_address.get_write_list(key_value + 1)
         res += await client.receive_key_in_own_dungeon(ctx, item.name, write_keys_to_storage)  # TODO: Move special operation here too
 
     # Get key elsewhere
@@ -42,7 +43,7 @@ async def receive_refill(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
     prog_received = min(client.item_count(ctx, item.refill, num_received_items),
                         len(item.give_ammo)) - 1
     if prog_received >= 0:
-        res.append((item.address, [item.give_ammo[prog_received]], item.domain))
+        res += item.address.get_write_list(item.give_ammo[prog_received])
     return res
 
 # Handle progressive and incremental items.
@@ -59,7 +60,7 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
         item_address = item.address
 
     # Read address item is to be written to
-    prev_value = await read_memory_value(ctx, item_address, size=item.size)
+    prev_value = await item_address.read(ctx)
 
     # Handle different writing operations
     if "incremental" in item.tags:
@@ -90,22 +91,22 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
 
     item_values = item_value if type(item_value) is list else [item_value]
     item_values = [min(255, i) for i in item_values]
-    res.append((item_address, item_values, item.domain))
+    res += item_address.get_write_list(item_values)
 
     # Handle special item conditions
     if hasattr(item, "give_ammo"):
-        res.append((item.ammo_address, [item.give_ammo[prog_received]], item.domain))
+        res += item.ammo_address.get_write_list(item.give_ammo[prog_received])
     if hasattr(item, "set_bit"):
         for adr, bit in item.set_bit:
-            bit_prev = await read_memory_value(ctx, adr)
-            res.append((adr, [bit | bit_prev], item.domain))
+            bit_prev = await adr.read(ctx)
+            res += adr.get_write_list(bit | bit_prev)
 
     return res
 
 async def remove_vanilla_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     address = client.key_address = await client.get_small_key_address(ctx)
-    prev_value = await read_memory_value(ctx, address)
-    return [(address, [prev_value-1], item.domain)]
+    prev_value = await address.read(ctx)
+    return address.get_write_list(prev_value-1)
 
 async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     res = []
@@ -115,11 +116,10 @@ async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClien
     address, value = item.progressive[index]
     if hasattr(item, "give_ammo"):
         ammo_v = item.give_ammo[min(max(index - 1, 0), len(item.give_ammo) - 1)]
-        res.append((item.ammo_address, [ammo_v], item.domain))
+        res += item.ammo_address.get_write_list(ammo_v)
     # Progressive overwrite fix
     if "progressive_overwrite" in item.tags and index > 1:
-        res.append(
-            (item.progressive[index - 1][0], [item.progressive[index - 1][1]], item.domain))
+        res += address.get_write_list(value)
     return res
 
 async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
@@ -130,12 +130,12 @@ async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientCont
         if client.prev_rupee_count + value > 9999:
             value = 9999 - client.prev_rupee_count
 
-    prev_value = await read_memory_value(ctx, address, size=item.size)
+    prev_value = await address.read(ctx)
     if "incremental" in item.tags:
         value = prev_value - value
     else:
         value = prev_value & (~value)
-    return [(item.address, split_bits(value, item.size), item.domain)]
+    return address.get_write_list(value)
 
 
 class DSItem:
@@ -146,19 +146,19 @@ class DSItem:
     classification: "ItemClassification"
 
     # Basics
-    address: int
+    address: "Address"
     value: int
     size: int or str
-    progressive: list[tuple]
+    progressive: list[tuple["Address", int]]
     domain: str
 
     # Ammo
-    ammo_address: int
+    ammo_address: "Address"
     give_ammo: list[int]  # Ammo amount for each upgrade stage
     refill: str  # item reference for refill data
 
     # Extra bits
-    set_bit: list[tuple]
+    set_bit: list[tuple["Address", int]]
     set_bit_in_room: dict[int, list]
 
     dungeon: int or bool  # dungeon stage
@@ -167,12 +167,6 @@ class DSItem:
     # Tags and flags
     dummy: bool
     tags: list[str]
-    # always_process: bool  # process item removal even when vanilla
-    # incremental: bool
-    # ship_part: bool
-    # treasure: bool
-    # progressive_overwrite: bool  # for progressive items that error if you keep the old bits
-    # backup_filler: bool
 
     overflow_item: str
     max: int  # only used for salvage, and is weird there.
