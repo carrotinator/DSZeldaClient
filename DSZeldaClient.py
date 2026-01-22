@@ -1127,7 +1127,7 @@ class DSZeldaClient(BizHawkClient):
         item: str | list[str] = vanilla_item or location["vanilla_item"]
         if isinstance(item, str):
             item_data = self.item_data[item]
-            print(f"Setting vanilla for {item} {item_data}")
+            print(f"Setting vanilla for {item_data}")
             if item is not None and not hasattr(item_data, "dummy"):
                 if ("incremental" in item_data.tags or hasattr(item_data, "progressive") or
                         item_data.id not in [i.item for i in ctx.items_received] or
@@ -1181,7 +1181,8 @@ class DSZeldaClient(BizHawkClient):
             print(f"oops it's vanilla or dummy! {self.last_vanilla_item}")
             write_list += await self.write_totok_keys_lol(ctx, item_name, item_data)  # TODO: Handle writing totok later
         else:
-            write_list += await item_data.receive_item(self, ctx, num_received_items)
+            more_write_list = await item_data.receive_item(self, ctx, num_received_items)
+            write_list += more_write_list
 
         # Write the new item to memory!
         print("Write list:")

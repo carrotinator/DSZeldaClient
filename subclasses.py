@@ -89,22 +89,33 @@ def split_bits(value, size):
         value = (value & f) >> 8
     return ret
 
+all_addresses = []
+
 class Address:
     addr_eu: int
     addr_us: int
+    addr: int
+    region: str
     domain: str
     size: int
+    all_addresses: list = all_addresses
 
     def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM"):
         self.addr_eu = addr_eu
         self.addr_us = addr_us
+        self.current_region = "eu"
+        self.addr = addr_eu
+        self.all_addresses.append(self)
 
-    def get_address(self, region="eu"):
-        if region == "eu":
-            return self.addr_eu
-        elif region == "us":
-            return self.addr_us
-        return None
+    def set_region(self, region):
+        self.current_region = region
+        self.addr = self.addr_eu if region == "eu" else self.addr_us
+
+    def get_address(self, region=None):
+        if region is None: return self.addr
+        if region == "eu": return self.addr_eu
+        if region == "us": return self.addr_us
+        else: return None
 
     def get_read_list(self, region="eu"):
         return [(self.get_address(region), self.size, self.domain)]
@@ -116,8 +127,10 @@ class Address:
         return await read_memory_value(ctx, self.get_address(region), self.size, self.domain, silent=silent)
 
     def __repr__(self, region="eu"):
-        return hex(self.get_address(region))
+        return f"Address Object {hex(self.get_address(region))}"
 
+    def __str__(self):
+        return hex(self.get_address())
 class DSTransition:
     """
     Datastructures for dealing with Transitions on the client side.

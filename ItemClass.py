@@ -35,6 +35,7 @@ async def receive_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext"
 
     # Extra key operations, in ph writing totok midway keys
     res += await client.received_special_small_keys(ctx, item.name, write_keys_to_storage)
+    return res
 
 async def receive_refill(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     res = []
@@ -227,3 +228,9 @@ class DSItem:
 
     def post_process(self, client: "DSZeldaClient", ctx: "BizHawkClientContext"):
         return
+
+    def __str__(self):
+        return f"{self.name}"
+
+    def __repr__(self):
+        return f"{type(self)} object {self.name}"
