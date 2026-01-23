@@ -150,7 +150,6 @@ class Address:
     def get_inner_write_list(self, value:int or list):
         if isinstance(value, int):
             value = split_bits(value, self.size)
-        print(f"making write list {self} {value}")
         return self.addr, value[:self.size], self.domain
 
     async def read(self, ctx, signed=False, silent=False):
