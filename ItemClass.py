@@ -20,7 +20,7 @@ async def receive_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext"
         new_v = prev | bit_filter if (prev & bit_filter) + key_data[
             "value"] > bit_filter else prev + key_data["value"]
         print(f"Writing {key_data['name']} key to storage: {hex(prev)} -> {hex(new_v)}")
-        return key_data["address"].get_write_list(new_v)
+        return key_data["address"].get_inner_write_list(new_v)
 
     # Get key in own dungeon
     if client.current_stage == item.dungeon:

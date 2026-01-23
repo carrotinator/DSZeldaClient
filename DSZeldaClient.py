@@ -9,8 +9,8 @@ from worlds._bizhawk.client import BizHawkClient
 from ..data.Constants import *
 from ..Util import *
 
-from .subclasses import (read_memory_value, read_memory_values, write_memory_value, write_memory_values,
-                         split_bits, get_address_from_heap, storage_key, get_stored_data)
+from .subclasses import (read_memory_value, read_memory_values,
+                         split_bits, storage_key, get_stored_data)
 from ..data.Addresses import *
 
 if TYPE_CHECKING:
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("Client")
 
 async def read_multiple(ctx, addresses, signed=False) -> dict["Address", int]:
-    reads = await bizhawk.read(ctx.bizhawk_ctx, [a.get_read_list(ctx) for a in addresses])
+    reads = await bizhawk.read(ctx.bizhawk_ctx, [a.get_inner_read_list() for a in addresses])
     reads = [int.from_bytes(r, "little", signed=signed) for r in reads]
     return {a: r for a, r in zip(addresses, reads)}
 
@@ -55,8 +55,8 @@ class DSZeldaClient(BizHawkClient):
         self.slot_id_addr = None
         self.received_item_index_addr = None
         self.starting_entrance = (11, 3, 5)  # stage, room, entrance
-        self.scene_addr = (0, 0, 0, 0)  # Stage, room, floor, entrance
-        self.exit_coords_addr = (0x1B2EC8, 0x1B2ECC, 0x1B2ED0)  # x, y, z. what coords to spawn link at when entering a
+        self.scene_addr: tuple["Address"] or None = None
+        self.exit_coords_addr = (addr_transition_x, addr_transition_y, addr_transition_z)  # x, y, z. what coords to spawn link at when entering a
         # continuous transition
         self.er_y_offest = 164  # In ph i use coords who's y is 164 off the entrance y
         self.ADDR_gMapManager = 0xe60
@@ -407,8 +407,10 @@ class DSZeldaClient(BizHawkClient):
 
                 # Read for checks on specific global flags
                 if len(self.watches) > 0:
-                    watch_result = await read_memory_values(ctx, self.watches)
-                    for loc_name, prev_value in watch_result.items():
+                    triggered_watches = []
+                    watch_result = await read_multiple(ctx, self.watches.values())
+                    for loc_name, prev_data in zip(self.watches.keys(), watch_result.items()):
+                        addr, prev_value = prev_data
                         loc_data = LOCATIONS_DATA[loc_name]
                         if prev_value & loc_data["value"]:
                             print(f"Got read item {loc_name} from address {loc_data['address']} "
@@ -417,7 +419,9 @@ class DSZeldaClient(BizHawkClient):
                             force_remove = False
                             await self._process_checked_locations(ctx, loc_name, force_remove)
                             self.receiving_location = True
-                            self.watches.pop(loc_name)
+                            triggered_watches.append(loc_name)
+                    for i in triggered_watches:
+                        self.watches.pop(i)
 
                 # Check if link is getting location
                 if self.getting_location and not self.receiving_location and self.locations_in_scene is not None:
@@ -436,7 +440,7 @@ class DSZeldaClient(BizHawkClient):
                     self._log_received_items = False
 
                 if num_received_items > len(ctx.items_received):
-                    await write_memory_value(ctx, self.received_item_index_addr, len(ctx.items_received), size=2, overwrite=True)
+                    await self.received_item_index_addr.overwrite(ctx, len(ctx.items_received))
                     logger.info(f"Save file has more items than Multiworld. Probable cause: loaded wrong save file. \n"
                                 f"Reset item count to Multiworld's. If this is the wrong save file, you can safely quit without saving.")
 
@@ -626,11 +630,11 @@ class DSZeldaClient(BizHawkClient):
         pass
 
     async def _set_starting_flags(self, ctx: "BizHawkClientContext") -> None:
-        write_list = [(self.slot_id_addr, split_bits(ctx.slot, 2), "Main RAM")]
+        write_list = self.slot_id_addr.get_write_list(ctx.slot)
         print(f"New game, setting starting flags for slot {ctx.slot}")
-        for adr, *value in STARTING_FLAGS:
-            write_list.append((adr, value, "Main RAM"))
-
+        for adr, _value in STARTING_FLAGS:
+            write_list += adr.get_write_list(_value)
+        print(f"normal flags wl: {write_list}")
         write_list += await self.set_special_starting_flags(ctx)
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
 
@@ -659,10 +663,7 @@ class DSZeldaClient(BizHawkClient):
         defer_entrance = None
 
         def write_entrance(s, r, e):
-            return [(self.scene_addr[0], split_bits(s, 4), "Main RAM"),
-                    (self.scene_addr[1], split_bits(r, 1), "Main RAM"),
-                    (self.scene_addr[2], split_bits(0, 4), "Main RAM"),
-                    (self.scene_addr[3], split_bits(e, 1), "Main RAM")]
+            return [a.get_inner_write_list(v) for a, v in zip(self.scene_addr, [s, r, 0, e])]
 
         def write_er(exit_d: "PHTransition"):
             if exit_d.entrance[2] == 0xFA:
@@ -673,12 +674,7 @@ class DSZeldaClient(BizHawkClient):
                 write_res = write_entrance(*exit_d.entrance)
 
             if exit_d.entrance[2] > 0xFA:
-                x, y, z = exit_d.coords
-                # print(f"exit coords {x} {y} {z}")
-                self.er_exit_coord_writes = [(self.exit_coords_addr[0], split_bits(x, 4), "Main RAM"),
-                                             (self.exit_coords_addr[1], split_bits(y, 4), "Main RAM"),
-                                             (self.exit_coords_addr[2], split_bits(z, 4), "Main RAM")]
-
+                self.er_exit_coord_writes = [addr.get_inner_write_list(coord) for addr, coord in zip(self.exit_coords_addr, exit_d.coords)]
             write_res += self.write_respawn_entrance(exit_d)
 
             return write_res
@@ -845,9 +841,9 @@ class DSZeldaClient(BizHawkClient):
                 self._dynamic_flags_to_reset += data.get("reset_flags", [])
 
         # Write dynamic flags to memory
-        read_list = {a: (a, 1, "Main RAM") for a in read_addr}
-        prev = await read_memory_values(ctx, read_list)
-        print(f"prevs: {[[hex(int(a)), hex(v)] for a, v in prev.items()]}")
+        read_list = read_addr
+        prev = await read_multiple(ctx, read_list)
+        print(f"prevs: {[[a, hex(v)] for a, v in prev.items()]}")
 
         # Calculate values to write
         for a, v in set_bits.items():
@@ -856,8 +852,7 @@ class DSZeldaClient(BizHawkClient):
             prev[a] = prev[a] & (~v)
 
         # Write
-        write_list = [(int(a), [v], "Main RAM") for a, v in prev.items()]
-        print(f"Dynaflags writes: {[[hex(a), [hex(i) for i in v]] for a, v, _ in write_list]}")
+        write_list = [a.get_inner_write_list(v) for a, v in prev.items()]
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
         return write_list
 
@@ -963,10 +958,10 @@ class DSZeldaClient(BizHawkClient):
         # Read a dict of addresses to see if they match value
         async def check_bits(d):
             if "check_bits" in d:
-                r_list = {addr: (addr, 1, "Main RAM") for addr, _, *args in d["check_bits"]}
+                r_list = [addr.get_inner_read_list() for addr, *_ in d["check_bits"]]
                 v_lookup = {addr: v for addr, v, *args in d["check_bits"]}
                 arg_lookup = {addr: args for addr, v, *args in d["check_bits"] if args}
-                values = await read_memory_values(ctx, r_list)
+                values = await read_multiple(ctx, r_list)
                 for addr, p in values.items():
                     if not arg_lookup.get(addr, False):
                         if not (p & v_lookup[addr]):
@@ -1076,7 +1071,7 @@ class DSZeldaClient(BizHawkClient):
             if "set_bit" in location:
                 for addr, bit in location["set_bit"]:
                     print(f"Setting bit {bit} for location vanil {location['vanilla_item']}")
-                    await write_memory_value(ctx, addr, bit)
+                    await addr.set_bit(ctx, bit)
 
             # Delay reset of vanilla item from certain address reads
             if "delay_reset" in location:
@@ -1180,8 +1175,7 @@ class DSZeldaClient(BizHawkClient):
             logger.info(f"Received Backlogged Item: {item_name}")
 
         # Increment in-game items received count
-        received_item_address = self.received_item_index_addr
-        write_list = [(received_item_address, split_bits(num_received_items + 1, 2), "Main RAM")]
+        write_list = self.received_item_index_addr.get_write_list(num_received_items+1)
         print(f"Vanilla item: {self.last_vanilla_item} for {item_name}")
 
         # If same as vanilla item don't remove
@@ -1389,17 +1383,17 @@ class DSZeldaClient(BizHawkClient):
                 loc_id = self.location_name_to_id[loc_name]
                 if loc_id in locations_found:
                     if "address" in location:
-                        read = await read_memory_value(ctx, location["address"])
+                        read = await location["address"].read(ctx)
                         if read & location["value"]:
                             print(f"Location {loc_name} has already been found and triggered")
                             continue
                 else:
                     if "sram_addr" in location and location["sram_addr"] is not None:
                         sram_read_list[loc_name] = (location["sram_addr"], 1, "SRAM")
-                        print(f"\tCreated sram read for loacation {loc_name}")
+                        print(f"\tCreated sram read for location {loc_name}")
 
                 if "address" in location:
-                    self.watches[loc_name] = (location["address"], 1, "Main RAM")
+                    self.watches[loc_name] = location["address"]
 
             # Read and set locations missed when bizhawk was disconnected
             if self.save_slot == 0 and len(sram_read_list) > 0:
@@ -1432,8 +1426,8 @@ class DSZeldaClient(BizHawkClient):
         """
         key_address = self.key_address = await self.get_small_key_address(ctx)
         key_data = self.dungeon_key_data.get(current_stage, None)
-        read_list = {"dungeon": (key_address, 1, "Main RAM"),
-                     "tracker": (key_data["address"], 1, "Main RAM")}
+        read_list = {"dungeon": key_address.get_inner_read_list(),
+                     "tracker": key_data["address"].get_inner_read_list()}
         key_values = await read_memory_values(ctx, read_list)
 
         new_keys = (((key_values["tracker"] & key_data["filter"]) // key_data["value"])
@@ -1444,12 +1438,12 @@ class DSZeldaClient(BizHawkClient):
             new_keys = 7 if new_keys >= 7 else new_keys
             new_keys, reset_key_count = await self.update_special_key_count(ctx, current_stage, new_keys, key_data, key_values, key_address)
             new_keys = 0 if new_keys < 0 else new_keys
-            write_list = [(key_address, [new_keys], "Main RAM")]
+            write_list = key_address.get_write_list(new_keys)
             if reset_key_count:
                 reset_tracker = (~key_data["filter"]) & key_values["tracker"]
-                write_list += [(key_data["address"], [reset_tracker], "Main RAM")]
+                write_list += key_data["address"].get_write_list(ctx, reset_tracker)
 
-            print(f"Finally writing keys to memory {hex(key_address)} with value {hex(new_keys)}")
+            print(f"Finally writing keys to memory {key_address} with value {hex(new_keys)}")
             await bizhawk.write(ctx.bizhawk_ctx, write_list)
 
     async def _process_scouted_locations(self, ctx: "BizHawkClientContext", scene):

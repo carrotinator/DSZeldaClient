@@ -65,13 +65,14 @@ async def write_memory_values(ctx, address: int, values: list, domain="Main RAM"
 
 
 # Get address from pointer
-async def get_address_from_heap(ctx, pointer, offset=0) -> int:
+async def get_address_from_heap(ctx, pointer, offset=0) -> "Address":
     m_course = 0
     while m_course == 0:
-        m_course = await read_memory_value(ctx, pointer, 4, domain="Data TCM")
-    read = await read_memory_value(ctx, m_course - 0x02000000, 4)
+        m_course = await pointer.read(ctx)
+    m_course = Address(m_course - 0x02000000, size=4)
+    read = await m_course.read(ctx)
     print(f"Got map address @ {hex(read + offset - 0x02000000)}")
-    return read + offset - 0x02000000
+    return Address(read + offset - 0x02000000, size=4)
 
 def storage_key(ctx, key: str):
     return f"{key}_{ctx.slot}_{ctx.team}"
@@ -104,8 +105,10 @@ class Address:
     all_addresses: list = all_addresses
 
     def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM", offset=0, name=""):
+        if domain == "Main RAM":
+            assert addr_eu < 0x400000
         self.addr_eu = addr_eu + offset
-        self.addr_us = addr_us + offset
+        self.addr_us = addr_us + offset if addr_us else None
         self.addr_lookup = [self.addr_eu, self.addr_us]
         self.addr = self.addr_eu
 
@@ -116,7 +119,6 @@ class Address:
         self.name = name
 
         self.all_addresses.append(self)
-        print(all_addresses)
 
     def set_region(self, region):
         self.current_region = self._region_int(region)
@@ -137,12 +139,19 @@ class Address:
         return self.addr
 
     def get_read_list(self):
-        return [(self.addr, self.size, self.domain)]
+        return [self.get_inner_read_list()]
+
+    def get_inner_read_list(self) -> tuple:
+        return self.addr, self.size, self.domain
 
     def get_write_list(self, value:int or list):
+        return [self.get_inner_write_list(value)]
+
+    def get_inner_write_list(self, value:int or list):
         if isinstance(value, int):
             value = split_bits(value, self.size)
-        return [(self.addr, value, self.domain)]
+        print(f"making write list {self} {value}")
+        return self.addr, value[:self.size], self.domain
 
     async def read(self, ctx, signed=False, silent=False):
         read_result = await self.read_bytes(ctx)
@@ -155,19 +164,22 @@ class Address:
         return await bizhawk.read(ctx.bizhawk_ctx, [(self.addr, self.size, self.domain)])
 
     async def overwrite(self, ctx, value, silent=False):
+        if isinstance(value, int):
+            value = split_bits(value, self.size)
         if not silent:
-            print(f"\tWriting to address {self} with value {hex(value)}")
-        return await bizhawk.write(ctx.bizhawk_ctx, [(self.addr, split_bits(value, self.size), self.domain)])
+            print(f"\tWriting to address {self} with value {value}")
+        return await bizhawk.write(ctx.bizhawk_ctx, [(self.addr, value, self.domain)])
 
     async def add(self, ctx, value: int, silent=False):
         prev = await self.read(ctx, silent=silent)
-        return self.overwrite(ctx, prev + value, silent=silent)
+        return await self.overwrite(ctx, prev + value, silent=silent)
 
     async def set_bits(self, ctx, value: int or list, silent=False):
-        if isinstance(value, list):
-            value = sum([v<<(i*8) for i, v in enumerate(value)])
-        prev = await self.read(ctx, silent=silent)
-        return self.overwrite(ctx, prev | value, silent=silent)
+        if isinstance(value, int):
+            value = split_bits(value, self.size)
+        prev = split_bits(await self.read(ctx, silent=silent), self.size)
+        # print(f"Setting bits {self} {prev} {value} {[p | v for p, v in zip(prev, value)]}")
+        return await self.overwrite(ctx, [p | v for p, v in zip(prev, value)], silent=silent)
 
     def __repr__(self, region="eu"):
         return f"Address Object {hex(self.get_address(region))} {self.name}"
@@ -190,6 +202,9 @@ class Address:
 
     def __bool__(self):
         return bool(self.addr)
+
+    def __hash__(self):
+        return self.addr
 
 class DSTransition:
     """
