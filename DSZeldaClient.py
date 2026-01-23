@@ -21,6 +21,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Client")
 
+async def read_multiple(ctx, addresses, signed=False) -> dict["Address", int]:
+    reads = await bizhawk.read(ctx.bizhawk_ctx, [a.get_read_list(ctx) for a in addresses])
+    reads = [int.from_bytes(r, "little", signed=signed) for r in reads]
+    return {a: r for a, r in zip(addresses, reads)}
+
+async def write_multiple(ctx, addresses, values):
+    writes = [a.overwrite(ctx, v) for a, v in zip(addresses, values)]
+    await bizhawk.write(ctx.bizhawk_ctx, writes)
+
 class DSZeldaClient(BizHawkClient):
     local_checked_locations: Set[int]
     local_scouted_locations: Set[int]
@@ -64,6 +73,7 @@ class DSZeldaClient(BizHawkClient):
         self.was_alive_last_frame = False
         self.is_expecting_received_death = False
         self.is_dead = False  # Read from read_result
+        self.health_address: "Address" = addr_null
 
         self.save_slot = 0
         self.version_offset = 0
@@ -82,7 +92,7 @@ class DSZeldaClient(BizHawkClient):
         self._from_menu = True  # Last scene was menu
         self._dynamic_flags_to_reset = []
 
-        self.main_read_list = {}
+        self.main_read_list: list["Address"] = []
         self.read_result = {}
         self.current_stage = 0xB
         self.current_scene = None
@@ -91,7 +101,7 @@ class DSZeldaClient(BizHawkClient):
         self.entering_dungeon = None
         self.current_entrance = None
 
-        self.stage_address = addr_null  # Used for scene flags
+        self.stage_address: "Address" = addr_null  # Used for scene flags
         self.new_stage_loading = None
 
         self.getting_location_type = None
@@ -304,13 +314,11 @@ class DSZeldaClient(BizHawkClient):
         try:
 
             # Read main read list
-            read_result = await read_memory_values(ctx, self.main_read_list)
-            self.read_result = read_result
+            self.read_result = read_result = await read_multiple(ctx, self.main_read_list)
 
-            in_game = read_result["game_state"]
-            slot_memory = read_result["slot_id"]
-            current_stage = read_result["stage"]
-            self.current_stage = current_stage
+            in_game = read_result[addr_game_state]
+            slot_memory = read_result[addr_slot_id]
+            self.current_stage = current_stage = read_result[addr_stage]
 
             # Loading variables
             loading_scene = self.process_loading_variable(read_result)
@@ -348,16 +356,16 @@ class DSZeldaClient(BizHawkClient):
                 print(f"Started Game")
 
             # getting_location can be overwritten in process_read_list
-            self.getting_location = read_result.get("getting_location", None)
-            self.is_dead = not read_result.get("link_health", 12)
+            self.getting_location = read_result.get(addr_getting_location, None)
+            self.is_dead = not read_result.get(self.health_address, 12)
 
             # Get current scene
-            current_room = read_result.get("room", None)
+            current_room = read_result.get(addr_room, None)
             current_room = 0 if current_room == 0xFF and current_stage != 0x29 else current_room  # Resetting in a dungeon sets a special value
             current_room = 3 if current_room == 0xFF else current_room
             self.current_scene = current_scene = current_stage * 0x100 + current_room
-            current_entrance = read_result.get("entrance", 0)
-            num_received_items = read_result.get("received_item_index", None)
+            current_entrance = read_result.get(addr_entrance, 0)
+            num_received_items = read_result.get(addr_received_item_index, None)
 
 
             await self.process_read_list(ctx, read_result)

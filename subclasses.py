@@ -100,9 +100,10 @@ class Address:
     domain: str
     size: int
     offset: int
+    name: str
     all_addresses: list = all_addresses
 
-    def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM", offset=0):
+    def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM", offset=0, name=""):
         self.addr_eu = addr_eu + offset
         self.addr_us = addr_us + offset
         self.addr_lookup = [self.addr_eu, self.addr_us]
@@ -112,6 +113,7 @@ class Address:
         self.domain = domain
         self.size = size
         self.offset = offset
+        self.name = name
 
         self.all_addresses.append(self)
         print(all_addresses)
@@ -137,34 +139,42 @@ class Address:
     def get_read_list(self):
         return [(self.addr, self.size, self.domain)]
 
-    def get_write_list(self, value):
-        return [(self.addr, split_bits(value, self.size), self.domain)]
+    def get_write_list(self, value:int or list):
+        if isinstance(value, int):
+            value = split_bits(value, self.size)
+        return [(self.addr, value, self.domain)]
 
     async def read(self, ctx, signed=False, silent=False):
-        read_result = await bizhawk.read(ctx.bizhawk_ctx, [(self.addr, self.size, self.domain)])
+        read_result = await self.read_bytes(ctx)
         res = int.from_bytes(read_result[0], "little", signed=signed)
         if not silent:
             print(f"\tReading address {self}, got value {hex(res)}")
         return res
+
+    async def read_bytes(self, ctx):
+        return await bizhawk.read(ctx.bizhawk_ctx, [(self.addr, self.size, self.domain)])
 
     async def overwrite(self, ctx, value, silent=False):
         if not silent:
             print(f"\tWriting to address {self} with value {hex(value)}")
         return await bizhawk.write(ctx.bizhawk_ctx, [(self.addr, split_bits(value, self.size), self.domain)])
 
-    async def add(self, ctx, value, silent=False):
+    async def add(self, ctx, value: int, silent=False):
         prev = await self.read(ctx, silent=silent)
         return self.overwrite(ctx, prev + value, silent=silent)
 
-    async def set_bits(self, ctx, value, silent=False):
+    async def set_bits(self, ctx, value: int or list, silent=False):
+        if isinstance(value, list):
+            value = sum([v<<(i*8) for i, v in enumerate(value)])
         prev = await self.read(ctx, silent=silent)
         return self.overwrite(ctx, prev | value, silent=silent)
 
     def __repr__(self, region="eu"):
-        return f"Address Object {hex(self.get_address(region))}"
+        return f"Address Object {hex(self.get_address(region))} {self.name}"
 
     def __str__(self):
-        return hex(self.get_address())
+        name = f"{self.name}: " if self.name else ""
+        return f"{name}{hex(self.get_address())}"
 
     def __add__(self, other):
         return self.addr + other
