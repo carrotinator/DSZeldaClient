@@ -188,7 +188,7 @@ class Address:
         return await self.overwrite(ctx, [p | v for p, v in zip(prev, value)], silent=silent, offset=offset)
 
     def __repr__(self, region="eu"):
-        return f"{self.__class__} Object {hex(self.get_address(region))} {self.name}"
+        return f"Address Object {hex(self.get_address(region))} {self.name}"
 
     def __str__(self):
         name = f"{self.name}: " if self.name else ""

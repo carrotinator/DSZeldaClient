@@ -1078,7 +1078,7 @@ class DSZeldaClient(BizHawkClient):
             if "set_bit" in location:
                 for addr, bit in location["set_bit"]:
                     print(f"Setting bit {bit} for location vanil {location['vanilla_item']}")
-                    await addr.set_bit(ctx, bit)
+                    await addr.set_bits(ctx, bit)
 
             # Delay reset of vanilla item from certain address reads
             if "delay_reset" in location:
@@ -1449,7 +1449,7 @@ class DSZeldaClient(BizHawkClient):
             write_list = key_address.get_write_list(new_keys)
             if reset_key_count:
                 reset_tracker = (~key_data["filter"]) & key_values[tracker]
-                write_list += tracker.get_write_list(ctx, reset_tracker)
+                write_list += tracker.get_write_list(reset_tracker)
 
             print(f"Finally writing keys to memory {key_address} with value {hex(new_keys)}")
             await bizhawk.write(ctx.bizhawk_ctx, write_list)
