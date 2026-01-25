@@ -9,8 +9,6 @@ from worlds._bizhawk.client import BizHawkClient
 from ..data.Constants import *
 from ..Util import *
 
-from .subclasses import (read_memory_value, read_memory_values,
-                         split_bits, storage_key, get_stored_data)
 from ..data.Addresses import *
 
 if TYPE_CHECKING:
@@ -21,9 +19,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Client")
 
-async def read_multiple(ctx, addresses, signed=False) -> dict["Address", int]:
+async def read_multiple(ctx, addresses, signed=False, keys=None) -> dict["Address", int]:
     reads = await bizhawk.read(ctx.bizhawk_ctx, [a.get_inner_read_list() for a in addresses])
     reads = [int.from_bytes(r, "little", signed=signed) for r in reads]
+    if keys:
+        return {k: r for k, r in zip(keys, reads)}
     return {a: r for a, r in zip(addresses, reads)}
 
 async def write_multiple(ctx, addresses, values):
@@ -56,10 +56,9 @@ class DSZeldaClient(BizHawkClient):
         self.received_item_index_addr = None
         self.starting_entrance = (11, 3, 5)  # stage, room, entrance
         self.scene_addr: tuple["Address"] or None = None
-        self.exit_coords_addr = (addr_transition_x, addr_transition_y, addr_transition_z)  # x, y, z. what coords to spawn link at when entering a
+        self.exit_coords_addr = None  # x, y, z. what coords to spawn link at when entering a
         # continuous transition
         self.er_y_offest = 164  # In ph i use coords who's y is 164 off the entrance y
-        self.ADDR_gMapManager = 0xe60
         self.stage_flag_offset = 0x268
         self.entrances = {}
         self.hint_data = {}
@@ -131,6 +130,14 @@ class DSZeldaClient(BizHawkClient):
         self.precision_operation = None
         self.heal_on_load = False
         self.precision_delay_flags = False
+
+        # Mandatory addresses:
+        # addr_game_state
+        # addr_slot_id
+        # addr_stage
+        # addr_room
+        # addr_entrance
+        # addr_received_item_index
 
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
@@ -253,6 +260,7 @@ class DSZeldaClient(BizHawkClient):
     async def process_in_menu(self, ctx, read_result):
         """
         Called while in menu
+        :param read_result:
         :param ctx:
         :return:
         """
@@ -261,6 +269,7 @@ class DSZeldaClient(BizHawkClient):
     async def precision_backup(self, ctx, precision_read):
         """
         Check for false cases after triggering a precision read
+        :param precision_read:
         :param ctx:
         :return: True to cancel precision
         """
@@ -355,8 +364,6 @@ class DSZeldaClient(BizHawkClient):
                 await self.enter_game(ctx)
                 print(f"Started Game")
 
-            # getting_location can be overwritten in process_read_list
-            self.getting_location = read_result.get(addr_getting_location, None)
             self.is_dead = not read_result.get(self.health_address, 12)
 
             # Get current scene
@@ -408,10 +415,10 @@ class DSZeldaClient(BizHawkClient):
                 # Read for checks on specific global flags
                 if len(self.watches) > 0:
                     triggered_watches = []
-                    watch_result = await read_multiple(ctx, self.watches.values())
-                    for loc_name, prev_data in zip(self.watches.keys(), watch_result.items()):
-                        addr, prev_value = prev_data
+                    watch_result = await read_multiple(ctx, self.watches.values(), keys=self.watches.keys())
+                    for loc_name, prev_value in watch_result.items():
                         loc_data = LOCATIONS_DATA[loc_name]
+                        # print(f"Watch data: {loc_name} {prev_value} {loc_data['value']}")
                         if prev_value & loc_data["value"]:
                             print(f"Got read item {loc_name} from address {loc_data['address']} "
                                   f"looking at bit {loc_data['value']}")
@@ -420,8 +427,8 @@ class DSZeldaClient(BizHawkClient):
                             await self._process_checked_locations(ctx, loc_name, force_remove)
                             self.receiving_location = True
                             triggered_watches.append(loc_name)
-                    for i in triggered_watches:
-                        self.watches.pop(i)
+                            self.watches.pop(loc_name)
+
 
                 # Check if link is getting location
                 if self.getting_location and not self.receiving_location and self.locations_in_scene is not None:
@@ -958,7 +965,7 @@ class DSZeldaClient(BizHawkClient):
         # Read a dict of addresses to see if they match value
         async def check_bits(d):
             if "check_bits" in d:
-                r_list = [addr.get_inner_read_list() for addr, *_ in d["check_bits"]]
+                r_list = [addr for addr, *_ in d["check_bits"]]
                 v_lookup = {addr: v for addr, v, *args in d["check_bits"]}
                 arg_lookup = {addr: args for addr, v, *args in d["check_bits"] if args}
                 values = await read_multiple(ctx, r_list)
@@ -1375,21 +1382,22 @@ class DSZeldaClient(BizHawkClient):
         self.locations_in_scene = self.location_area_to_watches.get(scene, {}).copy()
         print(f"Locations in scene {scene}: {self.locations_in_scene.keys()}")
         self.watches = {}
-        sram_read_list = {}
+        sram_read_list = set()
+        active_srams = []
         locations_found = ctx.checked_locations
         if self.locations_in_scene is not None:
             # Create memory watches for checks triggerd by flags, and make list for checking sram
             for loc_name, location in self.locations_in_scene.items():
                 loc_id = self.location_name_to_id[loc_name]
-                if loc_id in locations_found:
-                    if "address" in location:
-                        read = await location["address"].read(ctx)
-                        if read & location["value"]:
-                            print(f"Location {loc_name} has already been found and triggered")
-                            continue
+                if loc_id in locations_found and "address" in location:
+                    read = await location["address"].read(ctx)
+                    if read & location["value"]:
+                        print(f"Location {loc_name} has already been found and triggered")
+                        continue
                 else:
                     if "sram_addr" in location and location["sram_addr"] is not None:
-                        sram_read_list[loc_name] = (location["sram_addr"], 1, "SRAM")
+                        active_srams.append((loc_name, location["sram_addr"], location["sram_value"]))
+                        sram_read_list.add(location["sram_addr"])
                         print(f"\tCreated sram read for location {loc_name}")
 
                 if "address" in location:
@@ -1397,9 +1405,9 @@ class DSZeldaClient(BizHawkClient):
 
             # Read and set locations missed when bizhawk was disconnected
             if self.save_slot == 0 and len(sram_read_list) > 0:
-                sram_reads = await read_memory_values(ctx, sram_read_list)
-                for loc_name, value in sram_reads.items():
-                    if value & LOCATIONS_DATA[loc_name]["sram_value"]:
+                sram_reads = await read_multiple(ctx, sram_read_list)
+                for loc_name, addr, _value in active_srams:
+                    if _value & sram_reads[addr]:
                         await self._process_checked_locations(ctx, loc_name)
 
     async def update_special_key_count(self, ctx, current_stage: int, new_keys:int, key_data: dict, key_values: dict, key_address: int) -> tuple[int, bool]:
@@ -1426,12 +1434,12 @@ class DSZeldaClient(BizHawkClient):
         """
         key_address = self.key_address = await self.get_small_key_address(ctx)
         key_data = self.dungeon_key_data.get(current_stage, None)
-        read_list = {"dungeon": key_address.get_inner_read_list(),
-                     "tracker": key_data["address"].get_inner_read_list()}
-        key_values = await read_memory_values(ctx, read_list)
+        tracker = key_data["address"]
+        read_list = [key_address, tracker]
+        key_values = await read_multiple(ctx, read_list)
 
-        new_keys = (((key_values["tracker"] & key_data["filter"]) // key_data["value"])
-                    + key_values["dungeon"])
+        new_keys = (((key_values[tracker] & key_data["filter"]) // key_data["value"])
+                    + key_values[key_address])
 
         # Create write list, reset key tracker
         if new_keys != 0:
@@ -1440,8 +1448,8 @@ class DSZeldaClient(BizHawkClient):
             new_keys = 0 if new_keys < 0 else new_keys
             write_list = key_address.get_write_list(new_keys)
             if reset_key_count:
-                reset_tracker = (~key_data["filter"]) & key_values["tracker"]
-                write_list += key_data["address"].get_write_list(ctx, reset_tracker)
+                reset_tracker = (~key_data["filter"]) & key_values[tracker]
+                write_list += tracker.get_write_list(ctx, reset_tracker)
 
             print(f"Finally writing keys to memory {key_address} with value {hex(new_keys)}")
             await bizhawk.write(ctx.bizhawk_ctx, write_list)
@@ -1456,11 +1464,11 @@ class DSZeldaClient(BizHawkClient):
         def check_slot_data(d):
             for args in d.get("slot_data", []):
                 if type(args) is str:
-                    option, value = args, [True]
+                    option, _value = args, [True]
                 else:
-                    option, value = args
-                    value = [value] if type(value) is int else value  # Support lists of values
-                if ctx.slot_data.get(option, "unknown_slot_data") not in value:
+                    option, _value = args
+                    _value = [_value] if type(_value) is int else _value  # Support lists of values
+                if ctx.slot_data.get(option, "unknown_slot_data") not in _value:
                     return False
             return True
 

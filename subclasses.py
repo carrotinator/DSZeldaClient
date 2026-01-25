@@ -65,14 +65,22 @@ async def write_memory_values(ctx, address: int, values: list, domain="Main RAM"
 
 
 # Get address from pointer
-async def get_address_from_heap(ctx, pointer, offset=0) -> "Address":
+async def get_address_from_heap(ctx, pointer, offset=0, size=4) -> "Address":
+    """
+    Reads a pointer, and follows that pointer with an offset
+    :param size: how many bytes
+    :param ctx:
+    :param pointer:
+    :param offset:
+    :return:
+    """
     m_course = 0
     while m_course == 0:
         m_course = await pointer.read(ctx)
-    m_course = Address(m_course - 0x02000000, size=4)
+    m_course = AddrFromPointer(m_course - 0x02000000, size=4)
     read = await m_course.read(ctx)
     print(f"Got map address @ {hex(read + offset - 0x02000000)}")
-    return Address(read + offset - 0x02000000, size=4)
+    return AddrFromPointer(read + offset - 0x02000000, size=size)
 
 def storage_key(ctx, key: str):
     return f"{key}_{ctx.slot}_{ctx.team}"
@@ -97,35 +105,34 @@ class Address:
     addr_eu: int
     addr_us: int
     addr: int
-    region: str
+    current_region: int
     domain: str
     size: int
     offset: int
     name: str
     all_addresses: list = all_addresses
 
-    def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM", offset=0, name=""):
+    def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM", name=""):
         if domain == "Main RAM":
             assert addr_eu < 0x400000
-        self.addr_eu = addr_eu + offset
-        self.addr_us = addr_us + offset if addr_us else None
+        self.addr_eu = addr_eu
+        self.addr_us = addr_us if addr_us else None
         self.addr_lookup = [self.addr_eu, self.addr_us]
         self.addr = self.addr_eu
 
         self.current_region = 0
         self.domain = domain
         self.size = size
-        self.offset = offset
         self.name = name
 
         self.all_addresses.append(self)
 
-    def set_region(self, region):
+    def set_region(self, region: str or int):
         self.current_region = self._region_int(region)
         self.addr = self.addr_lookup[self.current_region]
 
     @staticmethod
-    def _region_int(region):
+    def _region_int(region: str or int):
         if isinstance(region, str):
             assert region.lower() in ["eu", "us"]
             region = ["eu", "us"].index(region.lower())
@@ -162,26 +169,26 @@ class Address:
     async def read_bytes(self, ctx):
         return await bizhawk.read(ctx.bizhawk_ctx, [(self.addr, self.size, self.domain)])
 
-    async def overwrite(self, ctx, value, silent=False):
+    async def overwrite(self, ctx, value, silent=False, offset=0):
         if isinstance(value, int):
             value = split_bits(value, self.size)
         if not silent:
             print(f"\tWriting to address {self} with value {value}")
-        return await bizhawk.write(ctx.bizhawk_ctx, [(self.addr, value, self.domain)])
+        return await bizhawk.write(ctx.bizhawk_ctx, [(self.addr+offset, value, self.domain)])
 
-    async def add(self, ctx, value: int, silent=False):
+    async def add(self, ctx, value: int, silent=False, offset=0):
         prev = await self.read(ctx, silent=silent)
-        return await self.overwrite(ctx, prev + value, silent=silent)
+        return await self.overwrite(ctx, prev + value, silent=silent, offset=offset)
 
-    async def set_bits(self, ctx, value: int or list, silent=False):
+    async def set_bits(self, ctx, value: int or list, silent=False, offset=0):
         if isinstance(value, int):
             value = split_bits(value, self.size)
         prev = split_bits(await self.read(ctx, silent=silent), self.size)
         # print(f"Setting bits {self} {prev} {value} {[p | v for p, v in zip(prev, value)]}")
-        return await self.overwrite(ctx, [p | v for p, v in zip(prev, value)], silent=silent)
+        return await self.overwrite(ctx, [p | v for p, v in zip(prev, value)], silent=silent, offset=offset)
 
     def __repr__(self, region="eu"):
-        return f"Address Object {hex(self.get_address(region))} {self.name}"
+        return f"{self.__class__} Object {hex(self.get_address(region))} {self.name}"
 
     def __str__(self):
         name = f"{self.name}: " if self.name else ""
@@ -204,6 +211,42 @@ class Address:
 
     def __hash__(self):
         return self.addr
+
+class Pointer(Address):
+    """
+    Pointer from Data TCM
+    """
+
+    def __init__(self, addr, name=""):
+        super().__init__(addr, addr, 4, "Data TCM", name)
+
+
+class AddrFromPointer(Address):
+    """
+    When addresses are grabbed from pointers, version doesn't matter.
+    """
+
+    def __init__(self, addr, size=1, domain="Main RAM", name=""):
+        super().__init__(addr, addr, size, domain, name)
+
+class SRAM(Address):
+    """
+    Saveram also has slot data to care about.
+    """
+
+    def __init__(self, addr_eu_1, addr_eu_2=None, addr_us_1=None, addr_us_2=None, name=""):
+        super().__init__(addr_eu_1, addr_us_1, size=1, domain="SRAM", name=name)
+        self.slot = 0
+        self.addr_lookup = [(addr_eu_1, addr_eu_2), (addr_us_1, addr_us_2)]
+
+
+    async def read(self, ctx, signed=False, silent=False, slot=0):
+        addr = self.addr_lookup[self.current_region][self.slot]
+        read_result = await bizhawk.read(ctx.bizhawk_ctx, [(addr, self.size, self.domain)])
+        res = int.from_bytes(read_result[0], "little", signed=signed)
+        if not silent:
+            print(f"\tReading address {self}, got value {hex(res)}")
+        return res
 
 class DSTransition:
     """
