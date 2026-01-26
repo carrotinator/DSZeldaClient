@@ -143,6 +143,14 @@ class Address:
         # print(f"Setting bits {self} {prev} {value} {[p | v for p, v in zip(prev, value)]}")
         return await self.overwrite(ctx, [p | v for p, v in zip(prev, value)], silent=silent, offset=offset)
 
+    async def unset_bits(self, ctx, value: int or list, silent=False, offset=0):
+        if isinstance(value, int):
+            value = split_bits(value, self.size)
+        prev = split_bits(await self.read(ctx, silent=silent), self.size)
+        # print(f"Setting bits {self} {prev} {value} {[p | v for p, v in zip(prev, value)]}")
+        return await self.overwrite(ctx, [p & (~v) for p, v in zip(prev, value)], silent=silent, offset=offset)
+
+
     def __repr__(self, region="eu"):
         return f"Address Object {hex(self.get_address(region))} {self.name}"
 
@@ -154,6 +162,8 @@ class Address:
         return self.addr + other
 
     def __sub__(self, other):
+        if isinstance(other, Address):
+            return self.addr - other.addr
         return self.addr - other
 
     def __eq__(self, other):

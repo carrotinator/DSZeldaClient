@@ -137,6 +137,8 @@ async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientCont
         value = prev_value & (~value)
     return address.get_write_list(value)
 
+async def dummy_func(*args):
+    return []
 
 class DSItem:
     """
@@ -199,7 +201,7 @@ class DSItem:
         if hasattr(self, "address") or hasattr(self, "progressive"):
             return receive_normal
 
-        return None
+        return dummy_func
 
     def get_remove_vanilla_function(self):
         if hasattr(self, "dummy"):

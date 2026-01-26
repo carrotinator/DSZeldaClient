@@ -104,6 +104,7 @@ class DSZeldaClient(BizHawkClient):
         self.warp_to_start_flag = False
         self.er_map: dict[int, dict["DSTransition", "DSTransition"]] = {}
         self.er_in_scene: dict["DSTransition", "DSTransition"] | None = None
+        self.er_messages = dict()  # ER-message to send on certain entrances
         self.er_exit_coord_writes: list | None = None
         self.visited_scenes = set()
 
@@ -726,6 +727,8 @@ class DSZeldaClient(BizHawkClient):
                         print(f"Detected entrance: {detect_data} => {exit_data}")
                         e_write_list, res = post_process(exit_data)
                         defer_entrance = "traverse"
+                        if detect_data in self.er_messages:
+                            logger.info(self.er_messages[detect_data])
                     else:
                         e_write_list, res = post_process(detect_data)
                         if ctx.slot_data.get("ut_blocked_entrances_behaviour", 0) in [0, 2]:
@@ -766,12 +769,13 @@ class DSZeldaClient(BizHawkClient):
         :return:
         """
 
-    async def store_visited_entrances(self, ctx, detect_data, exit_data):
+    async def store_visited_entrances(self, ctx, detect_data, exit_data, interaction=None):
         """
         store visited entrances as a set of ints to datastorage
         :param ctx:
         :param detect_data:
         :param exit_data:
+        :param interaction: allows for different stuff, ph uses it for traverse/check data
         :return:
         """
 
@@ -870,6 +874,7 @@ class DSZeldaClient(BizHawkClient):
                         self.er_in_scene[detect_data] = dung_entr
             else:
                 self.er_in_scene[detect_data] = data["exit_data"]
+                self.er_messages[detect_data] = data.get("message", None)
             print(f"\t{detect_data} => {data['exit_data']}")
 
     async def _has_dynamic_requirements(self, ctx, data) -> bool:
