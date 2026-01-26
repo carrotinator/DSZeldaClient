@@ -8,27 +8,17 @@ import worlds._bizhawk as bizhawk
 from worlds._bizhawk.client import BizHawkClient
 from ..data.Constants import *
 from ..Util import *
+from .subclasses import read_multiple, write_multiple
 
 from ..data.Addresses import *
 
 if TYPE_CHECKING:
     from worlds._bizhawk.context import BizHawkClientContext
-    from ..data.Entrances import PHTransition
+    from ..Subclasses import DSTransition
     from .ItemClass import DSItem
     from .subclasses import Address
 
 logger = logging.getLogger("Client")
-
-async def read_multiple(ctx, addresses, signed=False, keys=None) -> dict["Address", int]:
-    reads = await bizhawk.read(ctx.bizhawk_ctx, [a.get_inner_read_list() for a in addresses])
-    reads = [int.from_bytes(r, "little", signed=signed) for r in reads]
-    if keys:
-        return {k: r for k, r in zip(keys, reads)}
-    return {a: r for a, r in zip(addresses, reads)}
-
-async def write_multiple(ctx, addresses, values):
-    writes = [a.overwrite(ctx, v) for a, v in zip(addresses, values)]
-    await bizhawk.write(ctx.bizhawk_ctx, writes)
 
 class DSZeldaClient(BizHawkClient):
     local_checked_locations: Set[int]
@@ -112,8 +102,8 @@ class DSZeldaClient(BizHawkClient):
         self._log_received_items = False
 
         self.warp_to_start_flag = False
-        self.er_map: dict[int, dict["PHTransition", "PHTransition"]] = {}
-        self.er_in_scene: dict["PHTransition", "PHTransition"] | None = None
+        self.er_map: dict[int, dict["DSTransition", "DSTransition"]] = {}
+        self.er_in_scene: dict["DSTransition", "DSTransition"] | None = None
         self.er_exit_coord_writes: list | None = None
         self.visited_scenes = set()
 
@@ -132,12 +122,12 @@ class DSZeldaClient(BizHawkClient):
         self.precision_delay_flags = False
 
         # Mandatory addresses:
-        # addr_game_state
-        # addr_slot_id
-        # addr_stage
-        # addr_room
-        # addr_entrance
-        # addr_received_item_index
+        self.addr_game_state = None
+        self.addr_slot_id = None
+        self.addr_stage = None
+        self.addr_room = None
+        self.addr_entrance = None
+        self.addr_received_item_index = None
 
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
@@ -325,9 +315,9 @@ class DSZeldaClient(BizHawkClient):
             # Read main read list
             self.read_result = read_result = await read_multiple(ctx, self.main_read_list)
 
-            in_game = read_result[addr_game_state]
-            slot_memory = read_result[addr_slot_id]
-            self.current_stage = current_stage = read_result[addr_stage]
+            in_game = read_result[self.addr_game_state]
+            slot_memory = read_result[self.addr_slot_id]
+            self.current_stage = current_stage = read_result[self.addr_stage]
 
             # Loading variables
             loading_scene = self.process_loading_variable(read_result)
@@ -367,12 +357,12 @@ class DSZeldaClient(BizHawkClient):
             self.is_dead = not read_result.get(self.health_address, 12)
 
             # Get current scene
-            current_room = read_result.get(addr_room, None)
+            current_room = read_result.get(self.addr_room, None)
             current_room = 0 if current_room == 0xFF and current_stage != 0x29 else current_room  # Resetting in a dungeon sets a special value
             current_room = 3 if current_room == 0xFF else current_room
             self.current_scene = current_scene = current_stage * 0x100 + current_room
-            current_entrance = read_result.get(addr_entrance, 0)
-            num_received_items = read_result.get(addr_received_item_index, None)
+            current_entrance = read_result.get(self.addr_entrance, 0)
+            num_received_items = read_result.get(self.addr_received_item_index, None)
 
 
             await self.process_read_list(ctx, read_result)
@@ -672,7 +662,7 @@ class DSZeldaClient(BizHawkClient):
         def write_entrance(s, r, e):
             return [a.get_inner_write_list(v) for a, v in zip(self.scene_addr, [s, r, 0, e])]
 
-        def write_er(exit_d: "PHTransition"):
+        def write_er(exit_d: "DSTransition"):
             if exit_d.entrance[2] == 0xFA:
                 # Special condition for exiting ships at sea
                 new_entrance = tuple(list(exit_d.entrance[:2]) + [exit_d.extra_data["ship_exit"]])
@@ -766,7 +756,7 @@ class DSZeldaClient(BizHawkClient):
         """
         return []
 
-    async def conditional_bounce(self, cxt, scene, entrance) -> "PhantomHourglassEntrance" or None:
+    async def conditional_bounce(self, cxt, scene, entrance) -> "Entrance" or None:
         """
         checks for bounce conditions if entrance is not affected by ER.
         returns the entrance to return to
@@ -1546,15 +1536,6 @@ class DSZeldaClient(BizHawkClient):
             "default": 0,
             "operations": [{"operation": "replace", "value": scene}]
         }])
-        # await ctx.send_msgs([{
-        #     "cmd": "Bounce",
-        #     "games": [self.game],
-        #     "slots": [ctx.slot],
-        #     "tags": ['Tracker'],
-        #     "data": {"stage": stage,
-        #              "room": room,
-        #              "entrance": entrance}
-        # }])
 
     def dungeon_hints(self, ctx):
         """
