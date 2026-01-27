@@ -1186,8 +1186,7 @@ class DSZeldaClient(BizHawkClient):
             print(f"oops it's vanilla or dummy! {self.last_vanilla_item}")
             write_list += await self.write_totok_keys_lol(ctx, item_name, item_data)  # TODO: Handle writing totok later
         else:
-            more_write_list = await item_data.receive_item(self, ctx, num_received_items)
-            write_list += more_write_list
+            write_list += await item_data.receive_item(self, ctx, num_received_items)
 
         # Write the new item to memory!
         print("Write list:")

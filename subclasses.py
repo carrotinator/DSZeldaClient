@@ -226,7 +226,9 @@ class DSTransition:
         self.data = data
 
         self.name: str = name
-        self.id: int | None = data.get("id", None)
+        self.id: int = data.get("id", None)
+        assert self.id is not None
+
         self.entrance: tuple = data.get("entrance", None)
         self.exit: tuple = data.get("exit", None)
         self.entrance_region: str = data["entrance_region"]
@@ -247,6 +249,7 @@ class DSTransition:
         self.vanilla_reciprocal: DSTransition | None = None  # Paired location
 
         self.copy_number = 0
+
 
     def get_scene(self):
         if self.room:
@@ -324,8 +327,8 @@ class DSTransition:
         counter = {}
         ident = 0
         for name, data in entrance_data.items():
+            data["id"] = ident
             res[name] = cls(name, data)
-            res[name].id = ident
             # print(f"{i} {ENTRANCES[name].entrance_region} -> {ENTRANCES[name].exit_region}")
             ident += 1
             point = data["entrance_region"] + "<=>" + data["exit_region"]
