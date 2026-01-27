@@ -178,6 +178,18 @@ class Address:
     def __hash__(self):
         return self.addr
 
+    def __gt__(self, other):
+        return self.addr > other
+
+    def __lt__(self, other):
+        return self.addr < other
+
+    def __ge__(self, other):
+        return self.addr >= other
+
+    def __le__(self, other):
+        return self.addr <= other
+
 class Pointer(Address):
     """
     Pointer from Data TCM
