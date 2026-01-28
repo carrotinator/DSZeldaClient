@@ -30,6 +30,9 @@ class DSZeldaClient(BizHawkClient):
     watches: Dict[str, tuple[int, int, str]]
     item_data: dict[str, "DSItem"]
 
+    stage_address: "Address"
+    health_address: "Address"
+
     def __init__(self) -> None:
         super().__init__()
         self.item_id_to_name = build_item_id_to_name_dict()
@@ -62,7 +65,6 @@ class DSZeldaClient(BizHawkClient):
         self.was_alive_last_frame = False
         self.is_expecting_received_death = False
         self.is_dead = False  # Read from read_result
-        self.health_address: "Address" = addr_null
 
         self.save_slot = 0
         self.version_offset = 0
@@ -90,9 +92,7 @@ class DSZeldaClient(BizHawkClient):
         self.entering_dungeon = None
         self.current_entrance = None
 
-        self.stage_address: "Address" = addr_null  # Used for scene flags
         self.new_stage_loading = None
-
         self.getting_location_type = None
 
         self._entered_entrance = False
@@ -114,7 +114,6 @@ class DSZeldaClient(BizHawkClient):
         self.metal_count = 0
 
         self.last_dungeon_warp_target = None
-
         self.tried_short_cs = False
 
         self.precision_mode = None

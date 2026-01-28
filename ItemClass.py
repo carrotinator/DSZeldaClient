@@ -86,6 +86,8 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
             item_value = item_value  # Bomb upgrades need to overwrite of everything breaks
         else:
             item_value = prev_value | item_value
+    elif "monotone_incremental" in item.tags:  # For incremental items you want to recalculate their count for each time.
+            item_value = item.value * client.item_count(ctx, item.name) + getattr(item, base_count, 0)
     else:
         item_value = prev_value | item.value
 
@@ -150,6 +152,7 @@ class DSItem:
     size: int or str
     progressive: list[tuple["Address", int]]
     domain: str
+    base_count: int  # If monotone_incremental, base amount of an item, ex. 12 for hearts
 
     # Ammo
     ammo_address: "Address"
