@@ -1,4 +1,230 @@
 from enum import IntEnum
+from typing import TYPE_CHECKING
+import worlds._bizhawk as bizhawk
+
+if TYPE_CHECKING:
+    try:
+        from ..Client import PhantomHourglassClient
+    except ImportError:
+        pass
+
+async def read_multiple(ctx, addresses, signed=False, keys=None) -> dict["Address", int] or dict[str, int]:
+    reads = await bizhawk.read(ctx.bizhawk_ctx, [a.get_inner_read_list() for a in addresses])
+    reads = [int.from_bytes(r, "little", signed=signed) for r in reads]
+    if keys:
+        return {k: r for k, r in zip(keys, reads)}
+    return {a: r for a, r in zip(addresses, reads)}
+
+async def write_multiple(ctx, addresses, values):
+    writes = [a.overwrite(ctx, v) for a, v in zip(addresses, values)]
+    await bizhawk.write(ctx.bizhawk_ctx, writes)
+
+
+# Get address from pointer
+async def get_address_from_heap(ctx, pointer, offset=0, size=4) -> "Address":
+    """
+    Reads a pointer, and follows that pointer with an offset
+    :param size: how many bytes
+    :param ctx:
+    :param pointer:
+    :param offset:
+    :return:
+    """
+    m_course = 0
+    while m_course == 0:
+        m_course = await pointer.read(ctx)
+    m_course = AddrFromPointer(m_course - 0x02000000, size=4)
+    read = await m_course.read(ctx)
+    print(f"Got map address @ {hex(read + offset - 0x02000000)}")
+    return AddrFromPointer(read + offset - 0x02000000, size=size)
+
+def storage_key(ctx, key: str):
+    return f"{key}_{ctx.slot}_{ctx.team}"
+
+def get_stored_data(ctx, key, default=None):
+    store = ctx.stored_data.get(storage_key(ctx, key), default)
+    store = store if store is not None else default
+    return store
+
+# Split up large values to write into smaller chunks
+def split_bits(value, size):
+    ret = []
+    f = 0xFFFFFFFFFFFFFF00
+    for _ in range(size):
+        ret.append(value & 0xFF)
+        value = (value & f) >> 8
+    return ret
+
+all_addresses = []
+
+class Address:
+    addr_eu: int
+    addr_us: int
+    addr: int
+    current_region: int
+    domain: str
+    size: int
+    offset: int
+    name: str
+    all_addresses: list = all_addresses
+
+    def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM", name=""):
+        if domain == "Main RAM":
+            assert addr_eu < 0x400000
+        self.addr_eu = addr_eu
+        self.addr_us = addr_us if addr_us else None
+        self.addr_lookup = [self.addr_eu, self.addr_us]
+        self.addr = self.addr_eu
+
+        self.current_region = 0
+        self.domain = domain
+        self.size = size
+        self.name = name
+
+        self.all_addresses.append(self)
+
+    def set_region(self, region: str or int):
+        self.current_region = self._region_int(region)
+        self.addr = self.addr_lookup[self.current_region]
+
+    @staticmethod
+    def _region_int(region: str or int):
+        if isinstance(region, str):
+            assert region.lower() in ["eu", "us"]
+            region = ["eu", "us"].index(region.lower())
+        assert region in [0, 1]
+        return region
+
+    def get_address(self, region=None):
+        if region is not None:
+            region = self._region_int(region)
+            return self.addr_lookup[region]
+        return self.addr
+
+    def get_read_list(self):
+        return [self.get_inner_read_list()]
+
+    def get_inner_read_list(self) -> tuple:
+        return self.addr, self.size, self.domain
+
+    def get_write_list(self, value:int or list):
+        return [self.get_inner_write_list(value)]
+
+    def get_inner_write_list(self, value:int or list):
+        if isinstance(value, int):
+            value = split_bits(value, self.size)
+        return self.addr, value[:self.size], self.domain
+
+    async def read(self, ctx, signed=False, silent=False):
+        read_result = await self.read_bytes(ctx)
+        res = int.from_bytes(read_result[0], "little", signed=signed)
+        if not silent:
+            print(f"\tReading address {self}, got value {hex(res)}")
+        return res
+
+    async def read_bytes(self, ctx):
+        return await bizhawk.read(ctx.bizhawk_ctx, [(self.addr, self.size, self.domain)])
+
+    async def overwrite(self, ctx, value, silent=False, offset=0):
+        if isinstance(value, int):
+            value = split_bits(value, self.size)
+        if not silent:
+            print(f"\tWriting to address {self} with value {value}")
+        return await bizhawk.write(ctx.bizhawk_ctx, [(self.addr+offset, value, self.domain)])
+
+    async def add(self, ctx, value: int, silent=False, offset=0):
+        prev = await self.read(ctx, silent=silent)
+        return await self.overwrite(ctx, prev + value, silent=silent, offset=offset)
+
+    async def set_bits(self, ctx, value: int or list, silent=False, offset=0):
+        if isinstance(value, int):
+            value = split_bits(value, self.size)
+        prev = split_bits(await self.read(ctx, silent=silent), self.size)
+        # print(f"Setting bits {self} {prev} {value} {[p | v for p, v in zip(prev, value)]}")
+        return await self.overwrite(ctx, [p | v for p, v in zip(prev, value)], silent=silent, offset=offset)
+
+    async def unset_bits(self, ctx, value: int or list, silent=False, offset=0):
+        if isinstance(value, int):
+            value = split_bits(value, self.size)
+        prev = split_bits(await self.read(ctx, silent=silent), self.size)
+        # print(f"Setting bits {self} {prev} {value} {[p | v for p, v in zip(prev, value)]}")
+        return await self.overwrite(ctx, [p & (~v) for p, v in zip(prev, value)], silent=silent, offset=offset)
+
+
+    def __repr__(self, region="eu"):
+        return f"Address Object {hex(self.get_address(region))} {self.name}"
+
+    def __str__(self):
+        name = f"{self.name}: " if self.name else ""
+        return f"{name}{hex(self.get_address())}"
+
+    def __add__(self, other):
+        return self.addr + other
+
+    def __sub__(self, other):
+        if isinstance(other, Address):
+            return self.addr - other.addr
+        return self.addr - other
+
+    def __eq__(self, other):
+        return self.addr == other
+
+    def __ne__(self, other):
+        return self.addr != other
+
+    def __bool__(self):
+        return bool(self.addr)
+
+    def __hash__(self):
+        return self.addr
+
+    def __gt__(self, other):
+        return self.addr > other
+
+    def __lt__(self, other):
+        return self.addr < other
+
+    def __ge__(self, other):
+        return self.addr >= other
+
+    def __le__(self, other):
+        return self.addr <= other
+
+class Pointer(Address):
+    """
+    Pointer from Data TCM
+    """
+
+    def __init__(self, addr, name=""):
+        super().__init__(addr, addr, 4, "Data TCM", name)
+
+
+class AddrFromPointer(Address):
+    """
+    When addresses are grabbed from pointers, version doesn't matter.
+    """
+
+    def __init__(self, addr, size=1, domain="Main RAM", name=""):
+        super().__init__(addr, addr, size, domain, name)
+
+class SRAM(Address):
+    """
+    Saveram also has slot data to care about.
+    """
+
+    def __init__(self, addr_eu_1, addr_eu_2=None, addr_us_1=None, addr_us_2=None, name=""):
+        super().__init__(addr_eu_1, addr_us_1, size=1, domain="SRAM", name=name)
+        self.slot = 0
+        self.addr_lookup = [(addr_eu_1, addr_eu_2), (addr_us_1, addr_us_2)]
+
+
+    async def read(self, ctx, signed=False, silent=False, slot=0):
+        addr = self.addr_lookup[self.current_region][self.slot]
+        read_result = await bizhawk.read(ctx.bizhawk_ctx, [(addr, self.size, self.domain)])
+        res = int.from_bytes(read_result[0], "little", signed=signed)
+        if not silent:
+            print(f"\tReading address {self}, got value {hex(res)}")
+        return res
 
 class DSTransition:
     """
@@ -12,7 +238,9 @@ class DSTransition:
         self.data = data
 
         self.name: str = name
-        self.id: int | None = data.get("id", None)
+        self.id: int = data.get("id", None)
+        assert self.id is not None
+
         self.entrance: tuple = data.get("entrance", None)
         self.exit: tuple = data.get("exit", None)
         self.entrance_region: str = data["entrance_region"]
@@ -33,6 +261,7 @@ class DSTransition:
         self.vanilla_reciprocal: DSTransition | None = None  # Paired location
 
         self.copy_number = 0
+
 
     def get_scene(self):
         if self.room:
@@ -110,8 +339,8 @@ class DSTransition:
         counter = {}
         ident = 0
         for name, data in entrance_data.items():
+            data["id"] = ident
             res[name] = cls(name, data)
-            res[name].id = ident
             # print(f"{i} {ENTRANCES[name].entrance_region} -> {ENTRANCES[name].exit_region}")
             ident += 1
             point = data["entrance_region"] + "<=>" + data["exit_region"]
