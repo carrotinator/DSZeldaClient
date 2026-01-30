@@ -486,6 +486,8 @@ class DSZeldaClient(BizHawkClient):
                         print("Item Received Successfully")
                         await self._remove_vanilla_item(ctx, num_received_items)
 
+                    await self.process_post_receive(ctx)
+
 
                 await self.detect_warp_to_start(ctx, read_result)
                 await self.process_in_game(ctx, read_result)
@@ -774,6 +776,11 @@ class DSZeldaClient(BizHawkClient):
         :param scene:
         :param entrance:
         :return:
+        """
+
+    async def process_post_receive(self, ctx):
+        """
+        Called after finished receiving item, after _remove_vanilla_item and delay_pickup
         """
 
     async def store_visited_entrances(self, ctx, detect_data, exit_data, interaction=None):
@@ -1113,8 +1120,6 @@ class DSZeldaClient(BizHawkClient):
         if "Small Key" in item_name:
             return await self.key_address.read(ctx)
         item = self.item_data[item_name]
-        if "Treasure" in item_name:
-            return self.treasure_tracker[item.address]
         return await item.address.read(ctx)
 
     async def _set_delay_pickup(self, ctx, loc_name, location):

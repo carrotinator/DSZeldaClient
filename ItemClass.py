@@ -125,12 +125,11 @@ async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClien
 async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     address, value = item.address, item.value
 
+    prev_value = await address.read(ctx)
     # Catch vanilla rupees going over 9999
     if "Rupee" in item.name:
-        value = 9999 - client.prev_rupee_count if client.prev_rupee_count + value > 9999 else value
-        value = client.prev_rupee_count if client.prev_rupee_count-value < 0 else value
-
-    prev_value = await address.read(ctx)
+        value = 9999 - prev_value if prev_value + value > 9999 else value
+        value = prev_valuet if prev_value-value < 0 else value
     if "incremental" in item.tags:
         value = prev_value - value
     else:
