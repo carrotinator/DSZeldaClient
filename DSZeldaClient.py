@@ -270,6 +270,11 @@ class DSZeldaClient(BizHawkClient):
         :return:
         """
 
+    async def on_connect(self, ctx):
+        """
+        Called on connecting
+        """
+
     async def game_watcher(self, ctx: "BizHawkClientContext") -> None:
         if not ctx.server or not ctx.server.socket.open or ctx.server.socket.closed or ctx.slot is None or ctx.slot == 0:
             self._just_entered_game = True
@@ -308,6 +313,7 @@ class DSZeldaClient(BizHawkClient):
         # Get main read list before entering loop
         if not self._loaded_menu_read_list:
             await self.update_main_read_list(ctx, self.current_stage, in_game=False)
+            await self.on_connect(ctx)
             self._loaded_menu_read_list = True
 
         try:
