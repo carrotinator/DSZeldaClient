@@ -33,6 +33,8 @@ class DSZeldaClient(BizHawkClient):
     stage_address: "Address"
     health_address: "Address"
 
+    treasure_tracker: dict["Address" or str, int]
+
     def __init__(self) -> None:
         super().__init__()
         self.item_id_to_name = build_item_id_to_name_dict()
@@ -1109,9 +1111,10 @@ class DSZeldaClient(BizHawkClient):
     async def get_item_read(self, ctx, item_name: str) -> int:
         if "Small Key" in item_name:
             return await self.key_address.read(ctx)
-        else:
-            item = self.item_data[item_name]
-            return await item.address.read(ctx)
+        item = self.item_data[item_name]
+        if "Treasure" in item_name:
+            return self.treasure_tracker[item.address]
+        return await item.address.read(ctx)
 
     async def _set_delay_pickup(self, ctx, loc_name, location):
         delay_locations = []
@@ -1135,14 +1138,18 @@ class DSZeldaClient(BizHawkClient):
     # Processes events defined in data\dynamic_flags.py
 
     async def _set_vanilla_item(self, ctx, location, vanilla_item: str | None = None):
-        item: str | list[str] = vanilla_item or location["vanilla_item"]
+        item: str | list[str] = vanilla_item or location.get("vanilla_item", None)
+        if item is None:
+            return
         if isinstance(item, str):
             item_data = self.item_data[item]
             print(f"Setting vanilla for {item_data}")
             if item is not None and not hasattr(item_data, "dummy"):
-                if ("incremental" in item_data.tags or hasattr(item_data, "progressive") or
-                        item_data.id not in [i.item for i in ctx.items_received] or
-                        "always_process" in item_data.tags):
+                if ("incremental" in item_data.tags
+                        or hasattr(item_data, "progressive")
+                        or item_data.id not in [i.item for i in ctx.items_received]
+                        or "always_process" in item_data.tags
+                        or "monotone_incremental" in item_data.tags):
                     self.last_vanilla_item.append(item)
 
                     await self.unset_special_vanilla_items(ctx, location, item)

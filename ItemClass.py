@@ -69,10 +69,6 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
         else:
             value = item.value
 
-            # Heal on heart container
-            if item.name == "Heart Container":
-                await client.full_heal(ctx)
-
         item_value = prev_value + value
         item_value = 0 if item_value <= 0 else item_value
         if "Rupee" in item.name:
@@ -87,7 +83,10 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
         else:
             item_value = prev_value | item_value
     elif "monotone_incremental" in item.tags:  # For incremental items you want to recalculate their count for each time.
-            item_value = item.value * client.item_count(ctx, item.name) + getattr(item, base_count, 0)
+            item_value = item.value * client.item_count(ctx, item.name) + getattr(item, "base_count", 0)
+            # Heal on heart container
+            if item.name == "Heart Container":
+                await client.full_heal(ctx, 4)
     else:
         item_value = prev_value | item.value
 
