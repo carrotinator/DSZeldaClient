@@ -431,7 +431,7 @@ class DSZeldaClient(BizHawkClient):
                 # Check if link is getting location
                 if self.getting_location and not self.receiving_location and self.locations_in_scene is not None:
                     self.receiving_location = True
-                    print("Receiving Item")
+                    print("Receiving Location")
                     if self.delay_reset > 1:
                         self.delay_reset = 0
                     await self._process_checked_locations(ctx, None, detection_type=self.getting_location_type)
@@ -1049,6 +1049,7 @@ class DSZeldaClient(BizHawkClient):
                 loc_bytes = self.location_name_to_id[loc_name]
 
                 if "address" in location or self.cancel_location_read(location):
+                    location = None
                     continue
 
                 print(f"Processing locs {loc_name}")

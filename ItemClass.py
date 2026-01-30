@@ -64,17 +64,16 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
 
     # Handle different writing operations
     if "incremental" in item.tags:
-        if type(item.value) is str:
+        value = item.value
+        if type(value) is str:
             value = await client.received_special_incremental(ctx, item)  # TODO: hook into this somehow?
-        else:
-            value = item.value
 
         item_value = prev_value + value
         item_value = 0 if item_value <= 0 else item_value
         if "Rupee" in item.name:
             item_value = min(item_value, 9999)
-        if item.size > 1:
-            item_value = split_bits(item_value, item.size)
+        if item.address.size > 1:
+            item_value = split_bits(item_value, item.address.size)
         if hasattr(item, "max") and item_value > item.max:
             item_value = min(item.max, prev_value)
     elif hasattr(item, "progressive"):
@@ -128,8 +127,8 @@ async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientCont
 
     # Catch vanilla rupees going over 9999
     if "Rupee" in item.name:
-        if client.prev_rupee_count + value > 9999:
-            value = 9999 - client.prev_rupee_count
+        value = 9999 - client.prev_rupee_count if client.prev_rupee_count + value > 9999 else value
+        value = client.prev_rupee_count if client.prev_rupee_count-value < 0 else value
 
     prev_value = await address.read(ctx)
     if "incremental" in item.tags:

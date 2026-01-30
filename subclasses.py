@@ -117,9 +117,9 @@ class Address:
 
     async def read(self, ctx, signed=False, silent=False):
         read_result = await self.read_bytes(ctx)
-        res = int.from_bytes(read_result[0], "little", signed=signed)
+        res = sum([int.from_bytes(b, "little", signed=signed)<<(8*i) for i, b in enumerate(read_result)])
         if not silent:
-            print(f"\tReading address {self}, got value {hex(res)}")
+            print(f"\tReading address {self}, got value {res}")
         return res
 
     async def read_bytes(self, ctx):
