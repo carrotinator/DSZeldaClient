@@ -1202,7 +1202,6 @@ class DSZeldaClient(BizHawkClient):
         if self.last_vanilla_item and item_name == self.last_vanilla_item[-1] and "always_process" not in item_data.tags:
             self.last_vanilla_item.pop()
             print(f"oops it's vanilla or dummy! {self.last_vanilla_item}")
-            write_list += await self.write_totok_keys_lol(ctx, item_name, item_data)  # TODO: Handle writing totok later
         else:
             write_list += await item_data.receive_item(self, ctx, num_received_items)
 
@@ -1223,16 +1222,6 @@ class DSZeldaClient(BizHawkClient):
         :param ctx:
         :param item_name:
         :param write_keys_to_storage: inner function that writes keys to storage based on key data
-        :return: write data
-        """
-        return []
-
-    async def write_totok_keys_lol(self, ctx, item_name, item_data) -> list:
-        """
-        if you get a key in TotOK, even in vanilla location, write to storage so that you get it again later
-        :param ctx:
-        :param item_name:
-        :param item_data:
         :return: write data
         """
         return []

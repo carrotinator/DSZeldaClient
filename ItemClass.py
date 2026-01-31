@@ -129,7 +129,7 @@ async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientCont
     # Catch vanilla rupees going over 9999
     if "Rupee" in item.name:
         value = 9999 - prev_value if prev_value + value > 9999 else value
-        value = prev_valuet if prev_value-value < 0 else value
+        value = prev_value if prev_value-value < 0 else value
     if "incremental" in item.tags:
         value = prev_value - value
     else:
