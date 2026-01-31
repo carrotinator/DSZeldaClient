@@ -89,9 +89,9 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
     else:
         item_value = prev_value | item.value
 
-    item_values = item_value if type(item_value) is list else [item_value]
-    item_values = [min(255, i) for i in item_values]
-    res += item_address.get_write_list(item_values)
+    # item_values = item_value if isinstance(item_value, list) else split_bits(item_value, item_address.size)
+    # item_values = [min(255, i) for i in item_values]
+    res += item_address.get_write_list(item_value)
 
     # Handle special item conditions
     if hasattr(item, "give_ammo"):
