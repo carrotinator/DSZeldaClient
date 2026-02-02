@@ -25,10 +25,14 @@ async def receive_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext"
     # Get key in own dungeon
     if client.current_stage == item.dungeon:
         print("In dungeon! Getting Key")
-        key_value = await client.key_address.read(ctx)
-        key_value = 7 if key_value > 7 else key_value
-        res += client.key_address.get_write_list(key_value + 1)
-        res += await client.receive_key_in_own_dungeon(ctx, item.name, write_keys_to_storage)  # TODO: Move special operation here too
+        # Don't remove vanilla keys
+        if client.last_vanilla_item[-1] == item.name:
+            client.last_vanilla_item.pop()
+        else:
+            key_value = await client.key_address.read(ctx)
+            key_value = 7 if key_value > 7 else key_value
+            res += client.key_address.get_write_list(key_value + 1)
+            res += await client.receive_key_in_own_dungeon(ctx, item.name, write_keys_to_storage)  # TODO: Move special operation here too
 
     # Get key elsewhere
     else:
@@ -82,10 +86,14 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
         else:
             item_value = prev_value | item_value
     elif "monotone_incremental" in item.tags:  # For incremental items you want to recalculate their count for each time.
+        item_value = item.value
+        if type(item_value) is str:
+            item_value = await client.received_special_incremental(ctx, item)  # TODO: hook into this somehow?
+        else:
             item_value = item.value * client.item_count(ctx, item.name) + getattr(item, "base_count", 0)
-            # Heal on heart container
-            if item.name == "Heart Container":
-                await client.full_heal(ctx, 4)
+        # Heal on heart container
+        if item.name == "Heart Container":
+            await client.full_heal(ctx, 4)
     else:
         item_value = prev_value | item.value
 
@@ -130,10 +138,11 @@ async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientCont
     if "Rupee" in item.name:
         value = 9999 - prev_value if prev_value + value > 9999 else value
         value = prev_value if prev_value-value < 0 else value
-    if "incremental" in item.tags:
-        value = prev_value - value
+    if "incremental" or "monotone_incremental" in item.tags:
+        value = prev_value if prev_value - value < 0 else prev_value - value
     else:
         value = prev_value & (~value)
+
     return address.get_write_list(value)
 
 class DSItem:
