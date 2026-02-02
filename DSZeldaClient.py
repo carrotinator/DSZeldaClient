@@ -379,7 +379,7 @@ class DSZeldaClient(BizHawkClient):
             if (current_scene != self.last_scene and not self._entered_entrance and not self._loading_scene) or self.precision_operation:
                 print(f"")  # New Scene, line space
                 # Trigger a different entrance to vanilla
-                current_stage, current_room, current_entrance = await self._entrance_warp(ctx, current_scene, current_entrance)
+                current_stage, current_room, current_entrance = await self._entrance_warp(ctx, self.current_scene, current_entrance)
                 current_scene = current_stage * 0x100 + current_room
                 self.current_entrance = current_entrance
                 self.current_scene = current_scene
@@ -530,7 +530,7 @@ class DSZeldaClient(BizHawkClient):
                     print(f"\t{i} => {v} {i.exit}")
 
                 await self.process_on_room_load(ctx, current_scene, read_result)
-                await self._load_local_locations(ctx, current_scene)
+                await self._load_local_locations(ctx, self.current_scene)
                 await self._process_scouted_locations(ctx, current_scene)
 
                 # Check if entering dungeon
@@ -888,7 +888,8 @@ class DSZeldaClient(BizHawkClient):
                         self.er_in_scene[detect_data] = dung_entr
             else:
                 self.er_in_scene[detect_data] = data["exit_data"]
-                self.er_messages[detect_data] = data.get("message", None)
+                if "message" in data:
+                    self.er_messages[detect_data] = data.get("message", None)
             print(f"\t{detect_data} => {data['exit_data']}")
 
     async def _has_dynamic_requirements(self, ctx, data) -> bool:
@@ -1381,7 +1382,7 @@ class DSZeldaClient(BizHawkClient):
     async def _load_local_locations(self, ctx, scene):
         # Load locations in room into loop
         self.locations_in_scene = self.location_area_to_watches.get(scene, {}).copy()
-        print(f"Locations in scene {scene}: {self.locations_in_scene.keys()}")
+        print(f"Locations in scene {hex(scene)}: {self.locations_in_scene.keys()}")
         self.watches = {}
         sram_read_list = set()
         active_srams = []
