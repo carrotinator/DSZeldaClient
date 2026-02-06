@@ -26,7 +26,7 @@ async def receive_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext"
     if client.current_stage == item.dungeon:
         print("In dungeon! Getting Key")
         # Don't remove vanilla keys
-        if client.last_vanilla_item[-1] == item.name:
+        if client.last_vanilla_item and client.last_vanilla_item[-1] == item.name:
             client.last_vanilla_item.pop()
         else:
             key_value = await client.key_address.read(ctx)
