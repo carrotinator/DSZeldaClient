@@ -33,7 +33,12 @@ class DSZeldaClient(BizHawkClient):
     stage_address: "Address"
     health_address: "Address"
 
-    treasure_tracker: dict["Address" or str, int]
+    treasure_tracker: dict["Address" | str, int]
+
+    starting_flags: list
+    dungeon_key_data: dict
+    slot_id_addr: "Address"
+    received_item_index_addr: "Address"
 
     def __init__(self) -> None:
         super().__init__()
@@ -45,10 +50,6 @@ class DSZeldaClient(BizHawkClient):
         self.entrance_id_to_entrance = build_entrance_id_to_data()
         self.dynamic_entrances_by_scene = {}
 
-        self.starting_flags = None
-        self.dungeon_key_data = None
-        self.slot_id_addr = None
-        self.received_item_index_addr = None
         self.starting_entrance = (11, 3, 5)  # stage, room, entrance
         self.scene_addr: tuple["Address"] or None = None
         self.exit_coords_addr = None  # x, y, z. what coords to spawn link at when entering a
