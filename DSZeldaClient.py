@@ -1,14 +1,14 @@
 
 import time
 import logging
-from typing import TYPE_CHECKING, Set, Dict, Any
+from typing import TYPE_CHECKING, Set, Dict, Any, Iterable
 
 from NetUtils import ClientStatus
 import worlds._bizhawk as bizhawk
 from worlds._bizhawk.client import BizHawkClient
 from ..data.Constants import *
 from ..Util import *
-from .subclasses import read_multiple, write_multiple
+from .subclasses import read_multiple, write_multiple, storage_key, get_stored_data
 
 from ..data.Addresses import *
 
@@ -131,6 +131,10 @@ class DSZeldaClient(BizHawkClient):
         self.addr_room = None
         self.addr_entrance = None
         self.addr_received_item_index = None
+        self.save_spam_protection = False
+
+        self.lss_retry_attempts = 4
+        self.last_saved_scene = None
 
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
@@ -285,6 +289,8 @@ class DSZeldaClient(BizHawkClient):
             self.last_scene = None
             self._from_menu = True
             self.er_in_scene = None
+            self.lss_retry_attempts = 4
+            self.last_saved_scene = None
             self.clear_variables()
             ctx.watcher_timeout = 0.4
             return
@@ -515,6 +521,7 @@ class DSZeldaClient(BizHawkClient):
                 print("Fully Loaded Room", current_scene)
                 self._loading_scene = False
                 self._backup_coord_read = None
+                self.save_spam_protection = False
 
                 # Set dynamic flags now if precision loading
                 if self.precision_delay_flags:
@@ -1557,3 +1564,28 @@ class DSZeldaClient(BizHawkClient):
         :return: list of location to scout
         """
         return []
+
+    async def save_scene(self, ctx, read_result, save_addr, save_key, save_comp: "Iterable"):
+        """
+        Save the current scene to memory. Used in ph for precision warps and st for weird scene stuff from menu
+        """
+        if read_result.get(save_addr, False) in save_comp and not self.save_spam_protection:
+            print(f"Saving scene {hex(self.current_scene)}")
+            self.last_saved_scene = self.current_scene
+            await self.store_data(ctx, storage_key(ctx, save_key), self.last_saved_scene, "replace", default=0)
+            self.save_spam_protection = True
+
+    async def get_saved_scene(self, ctx, save_key):
+        """
+        Get the last saved scene from datastorage. call from menu
+        """
+        if not self.last_saved_scene:
+            key = storage_key(ctx, save_key)
+            await ctx.send_msgs([{
+                "cmd": "Get",
+                "keys": [key]
+            }])
+            last_saved_scene = get_stored_data(ctx, save_key)
+            print(f"fetched last saved scene: {last_saved_scene}")
+            self.last_saved_scene = last_saved_scene if self.lss_retry_attempts >= 0 else 0 # if last_saved_scene is not None else False
+            self.lss_retry_attempts -= 1
