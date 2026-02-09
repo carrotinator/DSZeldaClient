@@ -30,32 +30,40 @@ class DSZeldaClient(BizHawkClient):
     watches: Dict[str, tuple[int, int, str]]
     item_data: dict[str, "DSItem"]
 
-    stage_address: "Address"
+    addr_game_state: "Address"
+    addr_slot_id: "Address"
+    addr_received_item_index: "Address"
+    addr_stage: "Address"
+    addr_room: "Address"
+    addr_entrance: "Address"
+    save_spam_protection: "Address"
+    stage_flag_address: "Address"  # Stage flag address
     health_address: "Address"
 
-    treasure_tracker: dict["Address" | str, int]
+    treasure_tracker: dict["Address" or str, int]
 
     starting_flags: list
     dungeon_key_data: dict
-    slot_id_addr: "Address"
-    received_item_index_addr: "Address"
+
+    starting_entrance: tuple  # stage_id, room_id, entrance_id
+    scene_addr: tuple  # stage, room, floor, entrance
+    exit_coords_addr: tuple  # x, y, z. what coords to spawn link at when entering a continuous transition
+
+    dynamic_entrances_by_scene: dict
+
+    stage_flag_offset: int
+    er_y_offest: int # In ph i use coords who's y is 164 off the entrance y
 
     def __init__(self) -> None:
         super().__init__()
+        # all grabbed from util
         self.item_id_to_name = build_item_id_to_name_dict()
         self.location_name_to_id = build_location_name_to_id_dict()
         self.location_area_to_watches = build_location_room_to_watches()
         self.scene_to_dynamic_flag = build_scene_to_dynamic_flag()
         self.hint_scene_to_watches = build_hint_scene_to_watches()
         self.entrance_id_to_entrance = build_entrance_id_to_data()
-        self.dynamic_entrances_by_scene = {}
 
-        self.starting_entrance = (11, 3, 5)  # stage, room, entrance
-        self.scene_addr: tuple["Address"] or None = None
-        self.exit_coords_addr = None  # x, y, z. what coords to spawn link at when entering a
-        # continuous transition
-        self.er_y_offest = 164  # In ph i use coords who's y is 164 off the entrance y
-        self.stage_flag_offset = 0x268
         self.entrances = {}
         self.hint_data = {}
 
@@ -114,7 +122,6 @@ class DSZeldaClient(BizHawkClient):
         self.delay_pickup = None
         self.last_key_count = 0
         self.key_address: "Address" = addr_null
-        self.metal_count = 0
 
         self.last_dungeon_warp_target = None
         self.tried_short_cs = False
@@ -123,15 +130,6 @@ class DSZeldaClient(BizHawkClient):
         self.precision_operation = None
         self.heal_on_load = False
         self.precision_delay_flags = False
-
-        # Mandatory addresses:
-        self.addr_game_state = None
-        self.addr_slot_id = None
-        self.addr_stage = None
-        self.addr_room = None
-        self.addr_entrance = None
-        self.addr_received_item_index = None
-        self.save_spam_protection = False
 
         self.lss_retry_attempts = 4
         self.last_saved_scene = None
@@ -452,7 +450,7 @@ class DSZeldaClient(BizHawkClient):
                     self._log_received_items = False
 
                 if num_received_items > len(ctx.items_received):
-                    await self.received_item_index_addr.overwrite(ctx, len(ctx.items_received))
+                    await self.addr_received_item_index.overwrite(ctx, len(ctx.items_received))
                     logger.info(f"Save file has more items than Multiworld. Probable cause: loaded wrong save file. \n"
                                 f"Reset item count to Multiworld's. If this is the wrong save file, you can safely quit without saving.")
 
@@ -645,7 +643,7 @@ class DSZeldaClient(BizHawkClient):
         pass
 
     async def _set_starting_flags(self, ctx: "BizHawkClientContext") -> None:
-        write_list = self.slot_id_addr.get_write_list(ctx.slot)
+        write_list = self.addr_slot_id.get_write_list(ctx.slot)
         print(f"New game, setting starting flags for slot {ctx.slot}")
         for adr, _value in STARTING_FLAGS:
             write_list += adr.get_write_list(_value)
@@ -1204,7 +1202,7 @@ class DSZeldaClient(BizHawkClient):
             logger.info(f"Received Backlogged Item: {item_name}")
 
         # Increment in-game items received count
-        write_list = self.received_item_index_addr.get_write_list(num_received_items+1)
+        write_list = self.addr_received_item_index.get_write_list(num_received_items+1)
         print(f"Vanilla item: {self.last_vanilla_item} for {item_name}")
 
         # If same as vanilla item don't remove
