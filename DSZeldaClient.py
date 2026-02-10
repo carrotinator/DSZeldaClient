@@ -909,10 +909,9 @@ class DSZeldaClient(BizHawkClient):
             else:
                 return True
 
-            for has_item in ctx.items_received:
-                for i, want_item in enumerate(d[label]):
-                    if has_item.item == self.item_data[want_item[0]].id:
-                        counter[i] += 1
+            for i, want_item in enumerate(d[label]):
+                counter[i] = self.item_count(ctx, want_item[0])
+            # print(f"Item Counter {d['name']}: {counter}")
 
             for item, count_have in zip(d.get("has_items", []), counter):
                 item, count_want, *operation = item
@@ -929,7 +928,8 @@ class DSZeldaClient(BizHawkClient):
             not_have_counter = 0
             for item, count_have in zip(d.get("not_has_all_items", []), counter):
                 item, count_want, *operation = item
-                if count_have > count_want:
+                # print(f"count have {count_have} >= {count_want}")
+                if count_have >= count_want:
                     not_have_counter += 1
                 if not_have_counter == len(counter):
                     return False
