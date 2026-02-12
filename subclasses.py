@@ -15,8 +15,8 @@ async def read_multiple(ctx, addresses, signed=False, keys=None) -> dict["Addres
         return {k: r for k, r in zip(keys, reads)}
     return {a: r for a, r in zip(addresses, reads)}
 
-async def write_multiple(ctx, addresses, values):
-    writes = [a.overwrite(ctx, v) for a, v in zip(addresses, values)]
+async def write_multiple(ctx, addresses: list["Address"], values: list[int]):
+    writes = [a.get_inner_write_list(v) for a, v in zip(addresses, values)]
     await bizhawk.write(ctx.bizhawk_ctx, writes)
 
 
