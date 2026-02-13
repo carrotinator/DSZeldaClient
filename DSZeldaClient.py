@@ -442,17 +442,19 @@ class DSZeldaClient(BizHawkClient):
                     await self._process_checked_locations(ctx, None, detection_type=self.getting_location_type)
 
                 # Process received items
-                if num_received_items is not None and num_received_items < len(ctx.items_received):
-                    if self._just_entered_game:
-                        self._log_received_items = True
-                    await self._process_received_items(ctx, num_received_items, self._log_received_items)
-                else:
-                    self._log_received_items = False
+                if num_received_items is not None:
+                    if num_received_items < len(ctx.items_received):
+                        print(f"Received items: {num_received_items}")
+                        if self._just_entered_game:
+                            self._log_received_items = True
+                        await self._process_received_items(ctx, num_received_items, self._log_received_items)
+                    else:
+                        self._log_received_items = False
 
-                if num_received_items > len(ctx.items_received):
-                    await self.addr_received_item_index.overwrite(ctx, len(ctx.items_received))
-                    logger.info(f"Save file has more items than Multiworld. Probable cause: loaded wrong save file. \n"
-                                f"Reset item count to Multiworld's. If this is the wrong save file, you can safely quit without saving.")
+                    if num_received_items > len(ctx.items_received):
+                        await self.addr_received_item_index.overwrite(ctx, len(ctx.items_received))
+                        logger.info(f"Save file has more items than Multiworld. Probable cause: loaded wrong save file. \n"
+                                    f"Reset item count to Multiworld's. If this is the wrong save file, you can safely quit without saving.")
 
                 # Exit location received cs
                 if self.receiving_location and not self.getting_location:
