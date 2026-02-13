@@ -133,6 +133,7 @@ class Address:
         return await bizhawk.write(ctx.bizhawk_ctx, [(self.addr+offset, value, self.domain)])
 
     async def add(self, ctx, value: int, silent=False, offset=0):
+        silent=False
         prev = await self.read(ctx, silent=silent)
         return await self.overwrite(ctx, prev + value, silent=silent, offset=offset)
 
