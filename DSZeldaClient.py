@@ -377,7 +377,6 @@ class DSZeldaClient(BizHawkClient):
             current_entrance = read_result.get(self.addr_entrance, 0)
             num_received_items = read_result.get(self.addr_received_item_index, None)
 
-
             await self.process_read_list(ctx, read_result)
 
             # Process on new room. As soon as it's triggered, changing the scene variable changes entrance destination
@@ -408,8 +407,7 @@ class DSZeldaClient(BizHawkClient):
                     await self._remove_vanilla_item(ctx, num_received_items)
 
             # Nothing happens while loading
-            if ctx.server is not None and not loading and not self._loading_scene and not self._entered_entrance:
-
+            if ctx.server and not loading and not self._loading_scene and not self._entered_entrance:
                 # If new file, set up starting flags
                 if slot_memory == 0:
                     if await self.watched_intro_cs(ctx):  # Check if watched intro cs
