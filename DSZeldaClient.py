@@ -98,6 +98,7 @@ class DSZeldaClient(BizHawkClient):
         self.read_result = {}
         self.current_stage = 0xB
         self.current_scene = None
+        self.current_room = None
         self.last_stage = None
         self.entering_from = None
         self.entering_dungeon = None
@@ -373,6 +374,7 @@ class DSZeldaClient(BizHawkClient):
             current_room = read_result.get(self.addr_room, None)
             current_room = 0 if current_room == 0xFF and current_stage != 0x29 else current_room  # Resetting in a dungeon sets a special value
             current_room = 3 if current_room == 0xFF else current_room
+            self.current_room = current_room
             self.current_scene = current_scene = current_stage * 0x100 + current_room
             current_entrance = read_result.get(self.addr_entrance, 0)
             num_received_items = read_result.get(self.addr_received_item_index, None)
@@ -388,6 +390,7 @@ class DSZeldaClient(BizHawkClient):
                 self.current_entrance = current_entrance
                 self.current_scene = current_scene
                 self.current_stage = current_stage
+                self.current_room = current_room
 
                 # Backup in case of missing loading
                 self._backup_coord_read = await self.get_coords(ctx, multi=True)

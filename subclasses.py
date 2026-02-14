@@ -33,10 +33,10 @@ async def get_address_from_heap(ctx, pointer, offset=0, size=4) -> "Address":
     m_course = 0
     while m_course == 0:
         m_course = await pointer.read(ctx)
-    m_course = AddrFromPointer(m_course - 0x02000000, size=4)
+    m_course = Address.from_pointer(m_course - 0x02000000, size=4)
     read = await m_course.read(ctx)
     print(f"Got map address @ {hex(read + offset - 0x02000000)}")
-    return AddrFromPointer(read + offset - 0x02000000, size=size)
+    return Address.from_pointer(read + offset - 0x02000000, size=size)
 
 def storage_key(ctx, key: str):
     return f"{key}_{ctx.slot}_{ctx.team}"
@@ -191,9 +191,20 @@ class Address:
     def __le__(self, other):
         return self.addr <= other
 
+    @classmethod
+    def pointer(cls, addr, name=""):
+        """Pointer from Data TCM"""
+        return cls(addr, addr, 4, "Data TCM", name)
+
+    @classmethod
+    def from_pointer(cls, addr, size=1, domain="Main RAM", name=""):
+        """When addresses are grabbed from pointers, the address is the same in all versions"""
+        return cls(addr, addr, size, domain, name)
+
 class Pointer(Address):
     """
     Pointer from Data TCM
+    work towards depreciating, it should have been a classmethod from the start
     """
 
     def __init__(self, addr, name=""):
@@ -203,6 +214,7 @@ class Pointer(Address):
 class AddrFromPointer(Address):
     """
     When addresses are grabbed from pointers, version doesn't matter.
+    work towards depreciating, it should have been a classmethod from the start
     """
 
     def __init__(self, addr, size=1, domain="Main RAM", name=""):
