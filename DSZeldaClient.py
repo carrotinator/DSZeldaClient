@@ -488,6 +488,9 @@ class DSZeldaClient(BizHawkClient):
 
                         self.delay_pickup = None
                         self.last_key_count = 0
+                        if self.last_vanilla_item:
+                            print("Delay Pickup is removing vanilla item")
+                            await self._remove_vanilla_item(ctx, num_received_items)
 
                     # Remove vanilla item
                     elif self.last_vanilla_item:
