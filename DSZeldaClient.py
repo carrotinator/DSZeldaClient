@@ -36,7 +36,7 @@ class DSZeldaClient(BizHawkClient):
     addr_stage: "Address"
     addr_room: "Address"
     addr_entrance: "Address"
-    save_spam_protection: "Address"
+    save_spam_protection: bool
     stage_flag_address: "Address"  # Stage flag address
     health_address: "Address"
 
@@ -409,6 +409,8 @@ class DSZeldaClient(BizHawkClient):
                     self.delay_reset = 0
                     await self._remove_vanilla_item(ctx, num_received_items)
 
+                await self.detected_new_scene(ctx)
+
             # Nothing happens while loading
             if ctx.server and not loading and not self._loading_scene and not self._entered_entrance:
                 # If new file, set up starting flags
@@ -585,6 +587,12 @@ class DSZeldaClient(BizHawkClient):
         except bizhawk.RequestFailedError:
             # Exit handler and return to main loop to reconnect
             print("Couldn't read data")
+
+    async def detected_new_scene(self, ctx: "BizHawkClientContext"):
+        """
+        Called on having detected a new scene, after updating entrance warp and setting dynaflags etc.
+        """
+        pass
 
     async def update_main_read_list(self, ctx: "BizHawkClientContext", stage: int, in_game=True):
         """
@@ -1447,7 +1455,7 @@ class DSZeldaClient(BizHawkClient):
         :return:
         """
         key_address = self.key_address = await self.get_small_key_address(ctx)
-        key_data = self.dungeon_key_data.get(current_stage, None)
+        key_data = self.dungeon_key_data.get(current_stage, {})
         tracker = key_data["address"]
         read_list = [key_address, tracker]
         key_values = await read_multiple(ctx, read_list)
@@ -1578,6 +1586,8 @@ class DSZeldaClient(BizHawkClient):
             self.last_saved_scene = self.current_scene
             await self.store_data(ctx, storage_key(ctx, save_key), self.last_saved_scene, "replace", default=0)
             self.save_spam_protection = True
+            return True
+        return False
 
     async def get_saved_scene(self, ctx, save_key):
         """
