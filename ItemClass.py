@@ -1,7 +1,6 @@
 
 from typing import TYPE_CHECKING
 from .subclasses import split_bits
-from ..data.Constants import DUNGEON_KEY_DATA
 
 if TYPE_CHECKING:
     from BaseClasses import ItemClassification
@@ -14,6 +13,7 @@ if TYPE_CHECKING:
 async def receive_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     res = []
     async def write_keys_to_storage(dungeon) -> tuple[int, list, str]:
+        from ..data.Constants import DUNGEON_KEY_DATA
         key_data = DUNGEON_KEY_DATA[dungeon]  # TODO: Add dungeon key data to item_data
         prev = await key_data["address"].read(ctx)
         bit_filter = key_data["filter"]
