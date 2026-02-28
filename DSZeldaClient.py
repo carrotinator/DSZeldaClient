@@ -1402,14 +1402,43 @@ class DSZeldaClient(BizHawkClient):
     async def _load_local_locations(self, ctx, scene):
         # Load locations in room into loop
         self.locations_in_scene = self.location_area_to_watches.get(scene, {}).copy()
-        print(f"Locations in scene {hex(scene)}: {self.locations_in_scene.keys()}")
+        print(f"Locations in scene {hex(scene)}: {list(self.locations_in_scene.keys())}")
         self.watches = {}
         sram_read_list = set()
         active_srams = []
         locations_found = ctx.checked_locations
+        print_again = False
+
+        def check_slot_data(loc):
+            if "slot_data" in loc:
+                for slot, value in location["slot_data"]:
+                    value = value if isinstance(value, list) else [value]
+                    if ctx.slot_data.get(slot, None) not in value:
+                        self.locations_in_scene.pop(loc_name)
+                        return False
+            return True
+
+        def check_entrance(loc):
+            if "from_entrances" in loc:
+                if self.current_entrance not in loc["from_entrances"]:
+                    self.locations_in_scene.pop(loc_name)
+                    return False
+            return True
+
         if self.locations_in_scene is not None:
             # Create memory watches for checks triggerd by flags, and make list for checking sram
-            for loc_name, location in self.locations_in_scene.items():
+            for loc_name, location in self.location_area_to_watches.get(scene, {}).items():
+
+                # Filter locations by slot data
+                if not check_slot_data(location):
+                    print(f"\tLocation {loc_name} has the wrong slotdata.")
+                    print_again = True
+                    continue
+                if not check_entrance(location):
+                    print(f"\tLocation {loc_name} has the wrong entrance.")
+                    print_again = True
+                    continue
+
                 loc_id = self.location_name_to_id[loc_name]
                 if loc_id in locations_found and "address" in location:
                     read = await location["address"].read(ctx)
@@ -1425,12 +1454,16 @@ class DSZeldaClient(BizHawkClient):
                 if "address" in location:
                     self.watches[loc_name] = location["address"]
 
+            if print_again:
+                print(f"Loaded Locations in scene {hex(scene)}: {list(self.locations_in_scene.keys())}")
+
             # Read and set locations missed when bizhawk was disconnected
             if self.save_slot == 0 and len(sram_read_list) > 0:
                 sram_reads = await read_multiple(ctx, sram_read_list)
                 for loc_name, addr, _value in active_srams:
                     if _value & sram_reads[addr]:
                         await self._process_checked_locations(ctx, loc_name)
+
 
     async def update_special_key_count(self, ctx, current_stage: int, new_keys:int, key_data: dict, key_values: dict, key_address: int) -> tuple[int, bool]:
         """
