@@ -972,10 +972,19 @@ class DSZeldaClient(BizHawkClient):
 
         def check_slot_data(d):
             if "has_slot_data" in d:
-                for slot, value in d["has_slot_data"]:
+                for slot, value, *args in d["has_slot_data"]:
+                    slot = ctx.slot_data.get(slot, None)
+                    # print(f"\t\tTesting slot {slot} {type(slot)} {value}")
                     if type(value) is list:
-                        if ctx.slot_data.get(slot, None) not in value:
+                        if slot not in value:
                             return False
+                    elif type(slot) is list:
+                        if args and args[0] == "not":
+                            if value in slot:
+                                return False
+                        else:
+                            if value not in slot:
+                                return False
                     else:
                         if ctx.slot_data.get(slot, None) != value:
                             return False
@@ -1411,11 +1420,20 @@ class DSZeldaClient(BizHawkClient):
 
         def check_slot_data(loc):
             if "slot_data" in loc:
-                for slot, value in location["slot_data"]:
-                    value = value if isinstance(value, list) else [value]
-                    if ctx.slot_data.get(slot, None) not in value:
-                        self.locations_in_scene.pop(loc_name)
-                        return False
+                for slot, value, *args in location["slot_data"]:
+                    slot = ctx.slot_data.get(slot, None)
+                    # print(f"\t\tgot slot {slot} {value}")
+                    if type(slot) is list:
+                        if args and args[0] == "not":
+                            if value in slot:
+                                return False
+                        elif value not in slot:
+                            return False
+                    else:
+                        value = value if isinstance(value, list) else [value]
+                        if slot not in value:
+                            self.locations_in_scene.pop(loc_name)
+                            return False
             return True
 
         def check_entrance(loc):
@@ -1521,10 +1539,21 @@ class DSZeldaClient(BizHawkClient):
                 if type(args) is str:
                     option, _value = args, [True]
                 else:
-                    option, _value = args
+                    option, _value, *args2 = args
+
+                slot = ctx.slot_data.get(option, None)
+                if type(slot) is list:
+                    print(f"Testing args2 {option} {slot} {_value} {args2}")
+                    if args2 and args2[0] == "not":
+                        if _value in slot:
+                            print(f"\tCanceled!")
+                            return False
+                    elif _value not in slot:
+                        return False
+                else:
                     _value = [_value] if type(_value) is int else _value  # Support lists of values
-                if ctx.slot_data.get(option, "unknown_slot_data") not in _value:
-                    return False
+                    if ctx.slot_data.get(option, "unknown_slot_data") not in _value:
+                        return False
             return True
 
         local_scouted_locations = set(ctx.locations_scouted)
@@ -1536,6 +1565,7 @@ class DSZeldaClient(BizHawkClient):
             if not check_items(hint_data):
                 continue
             if not check_slot_data(hint_data):
+                print(f"Hint {hint_name} is missing slot data")
                 continue
 
             # Figure out locations to hint
@@ -1552,7 +1582,7 @@ class DSZeldaClient(BizHawkClient):
                         local_scouted_locations.add(loc_id)
             else:
                 local_scouted_locations.add(self.location_name_to_id[hint_name])
-
+            print(local_scouted_locations)
         # Send hints
         if self.local_scouted_locations != local_scouted_locations:
             self.local_scouted_locations = local_scouted_locations
