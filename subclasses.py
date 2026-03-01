@@ -9,6 +9,7 @@ if TYPE_CHECKING:
         pass
 
 async def read_multiple(ctx, addresses, signed=False, keys=None) -> dict["Address", int] or dict[str, int]:
+    # print(f"\t reading {list(addresses)}")
     reads = await bizhawk.read(ctx.bizhawk_ctx, [a.get_inner_read_list() for a in addresses])
     reads = [int.from_bytes(r, "little", signed=signed) for r in reads]
     if keys:

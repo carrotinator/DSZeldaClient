@@ -973,20 +973,20 @@ class DSZeldaClient(BizHawkClient):
         def check_slot_data(d):
             if "has_slot_data" in d:
                 for slot, value, *args in d["has_slot_data"]:
-                    slot = ctx.slot_data.get(slot, None)
-                    # print(f"\t\tTesting slot {slot} {type(slot)} {value}")
+                    slot_value = ctx.slot_data.get(slot, None)
+                    # print(f"\t\tTesting slot {slot_value} {type(slot_value)} {value}")
                     if type(value) is list:
-                        if slot not in value:
+                        if slot_value not in value:
                             return False
-                    elif type(slot) is list:
+                    elif type(slot_value) is list:
                         if args and args[0] == "not":
-                            if value in slot:
+                            if value in slot_value:
                                 return False
                         else:
-                            if value not in slot:
+                            if value not in slot_value:
                                 return False
                     else:
-                        if ctx.slot_data.get(slot, None) != value:
+                        if slot_value != value:
                             return False
             return True
 
