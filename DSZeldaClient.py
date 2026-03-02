@@ -433,7 +433,8 @@ class DSZeldaClient(BizHawkClient):
                             await self._process_checked_locations(ctx, loc_name, force_remove)
                             self.receiving_location = True
                             triggered_watches.append(loc_name)
-                            self.watches.pop(loc_name)
+                            if "persistent" not in loc_data:
+                                self.watches.pop(loc_name)
 
 
                 # Check if link is getting location
@@ -1069,7 +1070,9 @@ class DSZeldaClient(BizHawkClient):
             self.receiving_location = True
             loc_id = self.location_name_to_id[pre_process]
             location = LOCATIONS_DATA[pre_process]
-            if r or (loc_id not in all_checked_locations):
+            vanilla_item_name = location.get("vanilla_item", None)
+            _item = self.item_data.get(vanilla_item_name, None) if isinstance(vanilla_item_name, str) else None
+            if r or (loc_id not in all_checked_locations) or (_item and "always_process" in _item.tags):
                 await self._set_vanilla_item(ctx, location, item)
                 local_checked_locations.add(loc_id)
             print(f"pre-processed {pre_process}, vanill {self.last_vanilla_item}")
@@ -1110,7 +1113,8 @@ class DSZeldaClient(BizHawkClient):
                     local_checked_locations.add(loc_bytes)
                     await self._set_vanilla_item(ctx, location)
                     print(f"Got location {loc_name}! with vanilla {self.last_vanilla_item} id {loc_bytes}")
-                    self.locations_in_scene.pop(loc_name)  # Remove location for overlapping purposes
+                    if "persistent" not in location:
+                        self.locations_in_scene.pop(loc_name)  # Remove location for overlapping purposes
                     break
                 location = None
 
@@ -1460,7 +1464,7 @@ class DSZeldaClient(BizHawkClient):
                 loc_id = self.location_name_to_id[loc_name]
                 if loc_id in locations_found and "address" in location:
                     read = await location["address"].read(ctx)
-                    if read & location["value"]:
+                    if read & location["value"] and "persistent" not in location:
                         print(f"Location {loc_name} has already been found and triggered")
                         continue
                 else:
