@@ -56,8 +56,6 @@ def split_bits(value, size):
         value = (value & f) >> 8
     return ret
 
-all_addresses = []
-
 class Address:
     addr_eu: int
     addr_us: int
@@ -67,7 +65,6 @@ class Address:
     size: int
     offset: int
     name: str
-    all_addresses: list = all_addresses
 
     def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM", name=""):
         if domain == "Main RAM":
@@ -81,8 +78,6 @@ class Address:
         self.domain = domain
         self.size = size
         self.name = name
-
-        self.all_addresses.append(self)
 
     def set_region(self, region: str or int):
         self.current_region = self._region_int(region)
