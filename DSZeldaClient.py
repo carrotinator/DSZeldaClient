@@ -382,7 +382,7 @@ class DSZeldaClient(BizHawkClient):
             await self.process_read_list(ctx, read_result)
 
             # Process on new room. As soon as it's triggered, changing the scene variable changes entrance destination
-            if (current_scene != self.last_scene and not self._entered_entrance and not self._loading_scene) or self.precision_operation:
+            if ((current_scene != self.last_scene or self.current_entrance != current_entrance) and not self._entered_entrance and not self._loading_scene) or self.precision_operation:
                 print(f"")  # New Scene, line space
                 # Trigger a different entrance to vanilla
                 current_stage, current_room, current_entrance = await self._entrance_warp(ctx, self.current_scene, current_entrance)
