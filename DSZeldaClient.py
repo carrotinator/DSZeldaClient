@@ -428,7 +428,7 @@ class DSZeldaClient(BizHawkClient):
 
                         comp = prev_value == loc_data["value"] if "exact_read" in loc_data else prev_value & loc_data["value"]
                         if comp:
-                            print(f"Got read item {loc_name} from address {loc_data['address']} "
+                            print(f"Got read item {loc_name} from address BLANK"
                                   f"looking at bit {loc_data['value']}")
 
                             force_remove = False
