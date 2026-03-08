@@ -135,6 +135,8 @@ class DSZeldaClient(BizHawkClient):
         self.lss_retry_attempts = 4
         self.last_saved_scene = None
 
+        self.cycle_counter: int = 0
+
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
 
@@ -330,7 +332,6 @@ class DSZeldaClient(BizHawkClient):
             self.read_result = read_result = await read_multiple(ctx, self.main_read_list)
 
             in_game = read_result[self.addr_game_state]
-            slot_memory = read_result[self.addr_slot_id]
             self.current_stage = current_stage = read_result[self.addr_stage]
 
             # Loading variables
@@ -411,112 +412,10 @@ class DSZeldaClient(BizHawkClient):
 
                 await self.detected_new_scene(ctx)
 
-            # Nothing happens while loading
+            # While not loading or in menu/cutscene, in game
             if ctx.server and not loading and not self._loading_scene and not self._entered_entrance:
-                # If new file, set up starting flags
-                if slot_memory == 0:
-                    if await self.watched_intro_cs(ctx):  # Check if watched intro cs
-                        await self._set_starting_flags(ctx)
-
-                # Read for checks on specific global flags
-                if len(self.watches) > 0:
-                    triggered_watches = []
-                    watch_result = await read_multiple(ctx, self.watches.values(), keys=self.watches.keys())
-                    for loc_name, prev_value in watch_result.items():
-                        loc_data = LOCATIONS_DATA[loc_name]
-                        # print(f"Watch data: {loc_name} {prev_value} {loc_data['value']}")
-
-                        comp = prev_value == loc_data["value"] if "exact_read" in loc_data else prev_value & loc_data["value"]
-                        if comp:
-                            print(f"Got read item {loc_name} from address BLANK"
-                                  f"looking at bit {loc_data['value']}")
-
-                            force_remove = False
-                            await self._process_checked_locations(ctx, loc_name, force_remove)
-                            self.receiving_location = True
-                            triggered_watches.append(loc_name)
-                            if "persistent" not in loc_data:
-                                self.watches.pop(loc_name)
-
-
-                # Check if link is getting location
-                if self.getting_location and not self.receiving_location and self.locations_in_scene is not None:
-                    self.receiving_location = True
-                    print("Receiving Location")
-                    if self.delay_reset > 1:
-                        self.delay_reset = 0
-                    await self._process_checked_locations(ctx, None, detection_type=self.getting_location_type)
-
-                # Process received items
-                if num_received_items is not None:
-                    if num_received_items < len(ctx.items_received):
-                        print(f"Received items: {num_received_items}")
-                        if self._just_entered_game:
-                            self._log_received_items = True
-                        await self._process_received_items(ctx, num_received_items, self._log_received_items)
-                    else:
-                        self._log_received_items = False
-
-                    if num_received_items > len(ctx.items_received):
-                        await self.addr_received_item_index.overwrite(ctx, len(ctx.items_received))
-                        logger.info(f"Save file has more items than Multiworld. Probable cause: loaded wrong save file. \n"
-                                    f"Reset item count to Multiworld's. If this is the wrong save file, you can safely quit without saving.")
-
-                # Exit location received cs
-                if self.receiving_location and not self.getting_location:
-                    self.receiving_location = False
-
-                    # Increment delay reset, probably haven't received item yet
-                    if self.delay_reset == 1:
-                        self.delay_reset += 1
-                        print(f"Delay Reset still active, {self.delay_reset}")
-
-                    # Check for delayed pickup first!
-                    elif self.delay_pickup is not None:
-                        print(f"Delay pickup {self.delay_pickup}")
-                        fallback, pickups = self.delay_pickup
-                        need_fallback = True
-                        for location, item, value in pickups:
-                            new_item_read = await self.get_item_read(ctx, item)
-                            if "Rupee" in item or "Rupoor" in item:
-                                if new_item_read - value == self.item_data[item].value:
-                                    print(f"delay pickup rupee: {new_item_read - value} == {self.item_data[item].value}")
-                                    await self._process_checked_locations(ctx, location, True, item=item)
-                                    need_fallback = False
-                            elif new_item_read != value:
-                                await self._process_checked_locations(ctx, location, True, item=item)
-                                need_fallback = False
-
-                        if need_fallback:
-                            vanilla_item = LOCATIONS_DATA[fallback]["vanilla_item"]
-                            await self._process_checked_locations(ctx, fallback, True, item=vanilla_item)
-
-                        self.delay_pickup = None
-                        self.last_key_count = 0
-                        if self.last_vanilla_item:
-                            print("Delay Pickup is removing vanilla item")
-                            await self._remove_vanilla_item(ctx, num_received_items)
-
-                    # Remove vanilla item
-                    elif self.last_vanilla_item:
-                        print("Item Received Successfully")
-                        await self._remove_vanilla_item(ctx, num_received_items)
-
-                    await self.process_post_receive(ctx)
-
-
-                await self.detect_warp_to_start(ctx, read_result)
                 await self.process_in_game(ctx, read_result)
-
                 self._just_entered_game = False
-
-                # Finished game?
-                if not ctx.finished_game:
-                    await self._process_game_completion(ctx)
-
-                # Process Deathlink
-                if "DeathLink" in ctx.tags:
-                    await self.process_deathlink(ctx, self.is_dead, self.current_stage, read_result)
 
             # Started actual scene loading
             if self._entered_entrance and loading_scene:
@@ -1343,6 +1242,129 @@ class DSZeldaClient(BizHawkClient):
         :param ctx:
         :param read_result:
         :return:
+        """
+        self.cycle_counter += 1
+        if not self.cycle_counter % 2000:
+            self.cycle_counter = 0
+            print(f"--")
+        num_received_items: int or None = read_result.get(self.addr_received_item_index, None)
+
+        # Slow Cycle
+        if not self.cycle_counter % 3:
+            # If new file, set up starting flags
+            if read_result[self.addr_slot_id] == 0:
+                if await self.watched_intro_cs(ctx):  # Check if watched intro cs
+                    await self._set_starting_flags(ctx)
+
+            # Finished game?
+            if not ctx.finished_game:
+                await self._process_game_completion(ctx)
+
+            # Process Deathlink
+            if "DeathLink" in ctx.tags:
+                await self.process_deathlink(ctx, self.is_dead, self.current_stage, read_result)
+
+            await self.process_slow(ctx, read_result)
+
+        # Fast Cycle
+        if not self.cycle_counter % 5:
+            await self.process_fast(ctx, read_result)
+
+        # Read for checks on specific global flags
+        if len(self.watches) > 0:
+            triggered_watches = []
+            watch_result = await read_multiple(ctx, self.watches.values(), keys=self.watches.keys())
+            for loc_name, prev_value in watch_result.items():
+                loc_data = LOCATIONS_DATA[loc_name]
+                # print(f"Watch data: {loc_name} {prev_value} {loc_data['value']}")
+
+                comp = prev_value == loc_data["value"] if "exact_read" in loc_data else prev_value & loc_data["value"]
+                if comp:
+                    print(f"Got read item {loc_name} from address BLANK"
+                          f"looking at bit {loc_data['value']}")
+
+                    force_remove = False
+                    await self._process_checked_locations(ctx, loc_name, force_remove)
+                    self.receiving_location = True
+                    triggered_watches.append(loc_name)
+                    if "persistent" not in loc_data:
+                        self.watches.pop(loc_name)
+
+        # Check if link is getting location
+        if self.getting_location and not self.receiving_location and self.locations_in_scene is not None:
+            self.receiving_location = True
+            print("Receiving Location")
+            if self.delay_reset > 1:
+                self.delay_reset = 0
+            await self._process_checked_locations(ctx, None, detection_type=self.getting_location_type)
+
+        # Exit location received cs
+        if self.receiving_location and not self.getting_location:
+            self.receiving_location = False
+
+            # Increment delay reset, probably haven't received item yet
+            if self.delay_reset == 1:
+                self.delay_reset += 1
+                print(f"Delay Reset still active, {self.delay_reset}")
+
+            # Check for delayed pickup first!
+            elif self.delay_pickup is not None:
+                print(f"Delay pickup {self.delay_pickup}")
+                fallback, pickups = self.delay_pickup
+                need_fallback = True
+                for location, item, value in pickups:
+                    new_item_read = await self.get_item_read(ctx, item)
+                    if "Rupee" in item or "Rupoor" in item:
+                        if new_item_read - value == self.item_data[item].value:
+                            print(f"delay pickup rupee: {new_item_read - value} == {self.item_data[item].value}")
+                            await self._process_checked_locations(ctx, location, True, item=item)
+                            need_fallback = False
+                    elif new_item_read != value:
+                        await self._process_checked_locations(ctx, location, True, item=item)
+                        need_fallback = False
+
+                if need_fallback:
+                    vanilla_item = LOCATIONS_DATA[fallback]["vanilla_item"]
+                    await self._process_checked_locations(ctx, fallback, True, item=vanilla_item)
+
+                self.delay_pickup = None
+                self.last_key_count = 0
+                if self.last_vanilla_item:
+                    print("Delay Pickup is removing vanilla item")
+                    await self._remove_vanilla_item(ctx, num_received_items)
+
+            # Remove vanilla item
+            elif self.last_vanilla_item:
+                print("Item Received Successfully")
+                await self._remove_vanilla_item(ctx, num_received_items)
+            await self.process_post_receive(ctx)
+
+        # Process received items
+        if num_received_items is not None:
+            if num_received_items < len(ctx.items_received):
+                print(f"Received items: {num_received_items}")
+                if self._just_entered_game:
+                    self._log_received_items = True
+                await self._process_received_items(ctx, num_received_items, self._log_received_items)
+            else:
+                self._log_received_items = False
+
+            if num_received_items > len(ctx.items_received):
+                await self.addr_received_item_index.overwrite(ctx, len(ctx.items_received))
+                logger.info(f"Save file has more items than Multiworld. Probable cause: loaded wrong save file. \n"
+                            f"Reset item count to Multiworld's. If this is the wrong save file, you can safely quit without saving.")
+
+        await self.detect_warp_to_start(ctx, read_result)
+
+    async def process_slow(self, ctx: "BizHawkClientContext", read_result: dict):
+        """
+        Gets called every 19 cycles in game, or every 2 seconds
+        """
+        pass
+
+    async def process_fast(self, ctx: "BizHawkClientContext", read_result: dict):
+        """
+        Gets called every 5 cycles in game, or every 0.5 seconds
         """
         pass
 
