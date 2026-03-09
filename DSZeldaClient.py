@@ -1574,7 +1574,7 @@ class DSZeldaClient(BizHawkClient):
 
                 slot = ctx.slot_data.get(option, None)
                 if type(slot) is list:
-                    print(f"Testing args2 {option} {slot} {_value} {args2}")
+                    # print(f"Testing args2 {option} {slot} {_value} {args2}")
                     if args2 and args2[0] == "not":
                         if _value in slot:
                             print(f"\tCanceled!")
@@ -1613,7 +1613,7 @@ class DSZeldaClient(BizHawkClient):
                         local_scouted_locations.add(loc_id)
             else:
                 local_scouted_locations.add(self.location_name_to_id[hint_name])
-            print(local_scouted_locations)
+        print(f"found hints {local_scouted_locations}")
         # Send hints
         if self.local_scouted_locations != local_scouted_locations:
             self.local_scouted_locations = local_scouted_locations
