@@ -826,6 +826,12 @@ class DSZeldaClient(BizHawkClient):
             elif "not_has_all_items" in d:
                 counter = [0] * len(d["not_has_all_items"])
                 label = "not_has_all_items"
+            elif "any_has_items" in d:
+                counter = [0] * len(d["any_has_items"])
+                label = "any_has_items"
+            elif "any_not_has_items" in d:
+                counter = [0] * len(d["any_not_has_items"])
+                label = "any_not_has_items"
             else:
                 return True
 
@@ -854,7 +860,18 @@ class DSZeldaClient(BizHawkClient):
                 if not_have_counter == len(counter):
                     return False
 
-            return True
+            res = not ("any_has_items" in d or "any_not_has_items" in d)
+            for item, count_have in zip(d.get("any_has_items", []), counter):
+                item, count_want, *operation = item
+                if count_have >= count_want:
+                    return True
+
+            for item, count_have in zip(d.get("any_not_has_items", []), counter):
+                item, count_want, *operation = item
+                if count_have < count_want:
+                    return True
+
+            return res
 
         # Check location conditions
         def check_locations(d):
