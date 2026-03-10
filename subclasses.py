@@ -1,5 +1,5 @@
 from enum import IntEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 import worlds._bizhawk as bizhawk
 
 if TYPE_CHECKING:
@@ -16,7 +16,7 @@ async def read_multiple(ctx, addresses, signed=False, keys=None) -> dict["Addres
         return {k: r for k, r in zip(keys, reads)}
     return {a: r for a, r in zip(addresses, reads)}
 
-async def write_multiple(ctx, addresses: list["Address"], values: list[int]):
+async def write_multiple(ctx, addresses: Iterable["Address"], values: Iterable[int]):
     writes = [a.get_inner_write_list(v) for a, v in zip(addresses, values)]
     await bizhawk.write(ctx.bizhawk_ctx, writes)
 

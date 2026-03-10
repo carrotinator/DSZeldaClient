@@ -332,14 +332,14 @@ class DSZeldaClient(BizHawkClient):
             self.read_result = read_result = await read_multiple(ctx, self.main_read_list)
 
             in_game = read_result[self.addr_game_state]
-            self.current_stage = current_stage = read_result[self.addr_stage]
+            self.current_stage = read_result[self.addr_stage]
 
             # Loading variables
             loading_scene = self.process_loading_variable(read_result)
             loading = loading_scene or self._entered_entrance
 
             # If player is on title screen, don't do anything else
-            if not in_game or current_stage not in STAGES:
+            if not in_game or self.current_stage not in STAGES:
                 self._previous_game_state = False
                 self._from_menu = True
                 await self.process_in_menu(ctx, read_result)
@@ -373,17 +373,17 @@ class DSZeldaClient(BizHawkClient):
 
             # Get current scene
             current_room = read_result.get(self.addr_room, None)
-            current_room = 0 if current_room == 0xFF and current_stage != 0x29 else current_room  # Resetting in a dungeon sets a special value
+            current_room = 0 if current_room == 0xFF and self.current_stage != 0x29 else current_room  # Resetting in a dungeon sets a special value
             current_room = 3 if current_room == 0xFF else current_room
             self.current_room = current_room
-            self.current_scene = current_scene = current_stage * 0x100 + current_room
+            self.current_scene = self.current_stage * 0x100 + current_room
             current_entrance = read_result.get(self.addr_entrance, 0)
             num_received_items = read_result.get(self.addr_received_item_index, None)
 
             await self.process_read_list(ctx, read_result)
 
             # Process on new room. As soon as it's triggered, changing the scene variable changes entrance destination
-            if ((current_scene != self.last_scene or self.current_entrance != current_entrance) and not self._entered_entrance and not self._loading_scene) or self.precision_operation:
+            if ((self.current_scene != self.last_scene or self.current_entrance != current_entrance) and not self._entered_entrance and not self._loading_scene) or self.precision_operation:
                 print(f"")  # New Scene, line space
                 # Trigger a different entrance to vanilla
                 current_stage, current_room, current_entrance = await self._entrance_warp(ctx, self.current_scene, current_entrance)
@@ -421,15 +421,16 @@ class DSZeldaClient(BizHawkClient):
             if self._entered_entrance and loading_scene:
                 self._loading_scene = True  # Second phase of loading room
                 self._entered_entrance = False
-                print(f"Loading Scene {current_scene}, setting coords {self.er_exit_coord_writes}")
+                print(f"Loading Scene {hex(self.current_scene) if self.current_scene else self.current_scene}, setting coords {self.er_exit_coord_writes}")
                 await self._set_er_coords(ctx)
 
             # Fully loaded room
             if self._loading_scene and not loading:
-                print("Fully Loaded Room", current_scene)
+                print("Fully Loaded Room", self.current_scene)
                 self._loading_scene = False
                 self._backup_coord_read = None
                 self.save_spam_protection = False
+                current_stage, current_scene = self.current_stage, self.current_scene
 
                 # Set dynamic flags now if precision loading
                 if self.precision_delay_flags:
@@ -1236,7 +1237,7 @@ class DSZeldaClient(BizHawkClient):
         """
         pass
 
-    async def process_in_game(self, ctx, read_result: dict):
+    async def process_in_game(self, ctx: "BizHawkClientContext", read_result: dict):
         """
         called every cycle in game, not while loading
         :param ctx:
@@ -1248,6 +1249,10 @@ class DSZeldaClient(BizHawkClient):
             self.cycle_counter = 0
             print(f"--")
         num_received_items: int or None = read_result.get(self.addr_received_item_index, None)
+        if ctx.server and not ctx.server.socket.open:
+            logger.warning(f"Bad Disconnect, tried running code without server connection")
+            return
+
 
         # Slow Cycle
         if not self.cycle_counter % 3:
@@ -1339,8 +1344,7 @@ class DSZeldaClient(BizHawkClient):
                 await self._remove_vanilla_item(ctx, num_received_items)
             await self.process_post_receive(ctx)
 
-        # Process received items
-        if num_received_items is not None:
+        if num_received_items is not None and ctx.server and ctx.server.socket.open:
             if num_received_items < len(ctx.items_received):
                 print(f"Received items: {num_received_items}")
                 if self._just_entered_game:
@@ -1350,6 +1354,7 @@ class DSZeldaClient(BizHawkClient):
                 self._log_received_items = False
 
             if num_received_items > len(ctx.items_received):
+                print(self.read_result)
                 await self.addr_received_item_index.overwrite(ctx, len(ctx.items_received))
                 logger.info(f"Save file has more items than Multiworld. Probable cause: loaded wrong save file. \n"
                             f"Reset item count to Multiworld's. If this is the wrong save file, you can safely quit without saving.")
