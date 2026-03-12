@@ -820,27 +820,39 @@ class DSZeldaClient(BizHawkClient):
 
     async def _has_dynamic_requirements(self, ctx, data) -> bool:
         def check_items(d):
+            def has_any(d2):
+                if not d2:
+                    return True
+                for _item, _count_want, *_operation in d2:
+                    _count_have = items_counts[_item]
+                    if _count_have >= _count_want:
+                        return True
+                return False
+
+            items_counts: dict[str, int] = {}
+            operations = []
             if "has_items" in d:
-                counter = [0] * len(d["has_items"])
-                label = "has_items"
+                operations.append("has_items")
             elif "not_has_all_items" in d:
-                counter = [0] * len(d["not_has_all_items"])
-                label = "not_has_all_items"
+                operations.append("not_has_all_items")
             elif "any_has_items" in d:
-                counter = [0] * len(d["any_has_items"])
-                label = "any_has_items"
+                operations.append("any_has_items")
             elif "any_not_has_items" in d:
-                counter = [0] * len(d["any_not_has_items"])
-                label = "any_not_has_items"
+                operations.append("any_not_has_items")
+            elif "any_has_items2" in d:
+                operations.append("any_not_has_items2")  # This is bad
             else:
                 return True
 
-            for i, want_item in enumerate(d[label]):
-                counter[i] = self.item_count(ctx, want_item[0])
+            for op in operations:
+                for want_item, *_ in d[op]:
+                    if want_item in items_counts:
+                        continue
+                    items_counts[want_item] = self.item_count(ctx, want_item[0])
             # print(f"Item Counter {d['name']}: {counter}")
 
-            for item, count_have in zip(d.get("has_items", []), counter):
-                item, count_want, *operation = item
+            for item, count_want, *operation in d.get("has_items", []):
+                count_have = items_counts[item]
                 if not operation:
                     if (count_want == 0 and count_have != 0) or (count_want > 0 and count_have < count_want):
                         return False
@@ -852,22 +864,23 @@ class DSZeldaClient(BizHawkClient):
                         return False
 
             not_have_counter = 0
-            for item, count_have in zip(d.get("not_has_all_items", []), counter):
-                item, count_want, *operation = item
+            for item, count_want, *operation in d.get("not_has_all_items", []):
+                count_have = item_counts[item]
                 # print(f"count have {count_have} >= {count_want}")
                 if count_have >= count_want:
                     not_have_counter += 1
                 if not_have_counter == len(counter):
                     return False
 
-            res = not ("any_has_items" in d or "any_not_has_items" in d)
-            for item, count_have in zip(d.get("any_has_items", []), counter):
-                item, count_want, *operation = item
-                if count_have >= count_want:
-                    return True
+            # any has operations, two pools cause i dont need more
+            if not has_any(d.get("any_has_items", [])):
+                return False
+            if not has_any(d.get("any_has_items2", [])):
+                return False
 
-            for item, count_have in zip(d.get("any_not_has_items", []), counter):
-                item, count_want, *operation = item
+            res = not "any_not_has_items" in d
+            for item, count_want, *operation in d.get("any_not_has_items", []):
+                count_have = item_counts[item]
                 if count_have < count_want:
                     return True
 
