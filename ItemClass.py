@@ -12,13 +12,16 @@ if TYPE_CHECKING:
 # Handle Small Keys
 async def receive_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     res = []
+    key_count = item.value if item.name.startswith("Keyring") else 1
+
     async def write_keys_to_storage(dungeon) -> tuple[int, list, str]:
         from ..data.Constants import DUNGEON_KEY_DATA
         key_data = DUNGEON_KEY_DATA[dungeon]  # TODO: Add dungeon key data to item_data
         prev = await key_data["address"].read(ctx)
         bit_filter = key_data["filter"]
-        new_v = prev | bit_filter if (prev & bit_filter) + key_data[
-            "value"] > bit_filter else prev + key_data["value"]
+        new_v = prev | bit_filter \
+            if (prev & bit_filter) + (key_data["value"]*key_count) > bit_filter \
+            else prev + (key_data["value"]*key_count)
         print(f"Writing {key_data['name']} key to storage: {hex(prev)} -> {hex(new_v)}")
         return key_data["address"].get_inner_write_list(new_v)
 
@@ -31,7 +34,7 @@ async def receive_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext"
         else:
             key_value = await client.key_address.read(ctx)
             key_value = 7 if key_value > 7 else key_value
-            res += client.key_address.get_write_list(key_value + 1)
+            res += client.key_address.get_write_list(key_value + key_count)
             res += await client.receive_key_in_own_dungeon(ctx, item.name, write_keys_to_storage)  # TODO: Move special operation here too
 
     # Get key elsewhere
