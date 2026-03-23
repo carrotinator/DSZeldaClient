@@ -136,6 +136,7 @@ class DSZeldaClient(BizHawkClient):
         self.last_saved_scene = None
 
         self.cycle_counter: int = 0
+        self.set_starting_flags = False
 
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
@@ -1283,13 +1284,17 @@ class DSZeldaClient(BizHawkClient):
             logger.warning(f"Bad Disconnect, tried running code without server connection")
             return
 
-
         # Slow Cycle
         if not self.cycle_counter % 3:
             # If new file, set up starting flags
             if read_result[self.addr_slot_id] == 0:
+                self.set_starting_flags = False
                 if await self.watched_intro_cs(ctx):  # Check if watched intro cs
                     await self._set_starting_flags(ctx)
+                    self._just_entered_game = True
+                    self.set_starting_flags = True
+            else:
+                self.set_starting_flags = True
 
             # Finished game?
             if not ctx.finished_game:
@@ -1300,6 +1305,10 @@ class DSZeldaClient(BizHawkClient):
                 await self.process_deathlink(ctx, self.is_dead, self.current_stage, read_result)
 
             await self.process_slow(ctx, read_result)
+
+        # Fast stuff doesn't happen until starting flags are set
+        if not self.set_starting_flags:
+            return
 
         # Fast Cycle
         if not self.cycle_counter % 5:
