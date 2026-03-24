@@ -96,7 +96,7 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
             item_value = item.value * client.item_count(ctx, item.name) + getattr(item, "base_count", 0)
         # Heal on heart container
         if item.name == "Heart Container":
-            await client.full_heal(ctx, 4)
+            await client.full_heal(ctx)
     else:
         item_value = prev_value | item.value
 
