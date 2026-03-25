@@ -60,9 +60,10 @@ class DSZeldaClient(BizHawkClient):
         self.item_id_to_name = build_item_id_to_name_dict()
         self.location_name_to_id = build_location_name_to_id_dict()
         self.location_area_to_watches = build_location_room_to_watches()
-        self.scene_to_dynamic_flag = build_scene_to_dynamic_flag()
+        self.scene_to_dynamic_flag: dict[int, list[dict]] = {}
         self.hint_scene_to_watches = build_hint_scene_to_watches()
         self.entrance_id_to_entrance = build_entrance_id_to_data()
+        self.dynamic_entrances_by_scene = None
 
         self.entrances = {}
         self.hint_data = {}
@@ -343,6 +344,7 @@ class DSZeldaClient(BizHawkClient):
             if not in_game or self.current_stage not in STAGES:
                 self._previous_game_state = False
                 self._from_menu = True
+                self.set_starting_flags = False
                 await self.process_in_menu(ctx, read_result)
                 ctx.watcher_timeout = 0.4
                 print("NOT IN GAME")
@@ -365,6 +367,7 @@ class DSZeldaClient(BizHawkClient):
             if in_game and self._from_menu:
                 self._generate_er_map(ctx)
                 self._from_menu = False
+                self._just_entered_game = True
                 ctx.watcher_timeout = 0.1  # 9 frame interval to catch 11 frame ER windows (old)
                                            # 6 frame intervals to catch bounce timings
                 await self.enter_game(ctx)
@@ -604,7 +607,7 @@ class DSZeldaClient(BizHawkClient):
             else:
                 write_res = write_entrance(*exit_d.entrance)
 
-            if exit_d.entrance[2] > 0xFA:
+            if exit_d.entrance[2] > 0xFA and self.exit_coords_addr:
                 self.er_exit_coord_writes = [addr.get_inner_write_list(coord) for addr, coord in zip(self.exit_coords_addr, exit_d.coords)]
             write_res += self.write_respawn_entrance(exit_d)
 
@@ -736,6 +739,9 @@ class DSZeldaClient(BizHawkClient):
 
     async def _set_dynamic_flags(self, ctx, scene):
         # Loop dynamic flags in scene
+        if not self.scene_to_dynamic_flag:
+            self.scene_to_dynamic_flag = build_scene_to_dynamic_flag(ctx)
+
         if scene in self.scene_to_dynamic_flag:
             print(f"Flags on Scene: {[i['name'] for i in self.scene_to_dynamic_flag[scene]]}")
             return await self._process_dynamic_flags(ctx, self.scene_to_dynamic_flag[scene], True)
@@ -799,6 +805,9 @@ class DSZeldaClient(BizHawkClient):
         return write_list
 
     async def _set_dynamic_entrances(self, ctx, scene):
+        if not self.dynamic_entrances_by_scene:
+            self.dynamic_entrances_by_scene = build_scene_to_dynamic_entrance(ctx)
+
         print(f"Setting dynamic Entrances on {hex(scene)}:")
         for data in self.dynamic_entrances_by_scene.get(scene, dict()).values():
 
@@ -908,6 +917,9 @@ class DSZeldaClient(BizHawkClient):
             return True
 
         def check_slot_data(d):
+            if d.get("on_scenes", False):
+                return True  # slot data is checked on load for scenes
+
             if "has_slot_data" in d:
                 for slot, value, *args in d["has_slot_data"]:
                     slot_value = ctx.slot_data.get(slot, None)
@@ -969,7 +981,7 @@ class DSZeldaClient(BizHawkClient):
         if not check_locations(data):
             print(f"\t{data['name']} does not have location reqs")
             return False
-        if not check_slot_data(data):
+        if not check_slot_data(data):  # Check now happens on load
             print(f"\t{data['name']} does not have slot data reqs")
             return False
         if not check_last_room(data):

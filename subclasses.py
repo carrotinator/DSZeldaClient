@@ -306,10 +306,12 @@ class DSTransition:
             z_max = self.extra_data.get("z_max", 0x8FFFFFFF)
             z_min = self.extra_data.get("z_min", -0x8FFFFFFF)
             y = self.coords[1] if self.coords else coords["y"] - y_offest
-            # print(f"Checking entrance {self.name}: x {x_max} > {coords['x']} > {x_min}")
-            # print(f"\ty: {y + 1000} > {y} > {coords['y'] - y_offest}")
-            # print(f"\tz: {z_max} > {coords['z']} > {z_min}")
+            print(f"Checking entrance {self.name}")
+            print(f"\tx: {x_max} > {coords['x']} > {x_min}")
+            print(f"\ty: {y + 1000} > {y} > {coords['y'] - y_offest}")
+            print(f"\tz: {z_max} > {coords['z']} > {z_min}")
             if y + 2000 > coords["y"] - y_offest >= y and x_max > coords["x"] > x_min and z_max > coords["z"] > z_min:
+                print(f"\tMatch!")
                 return True
         return False
 
