@@ -121,18 +121,21 @@ async def remove_vanilla_small_key(client: "DSZeldaClient", ctx: "BizHawkClientC
 
 async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     res = []
-    index = client.item_count(ctx, item.name, num_received_items)
+    index = client.item_count(ctx, item.name)
     if index >= len(item.progressive):
         return res
     address, value = item.progressive[index]
     if hasattr(item, "give_ammo"):
         ammo_v = item.give_ammo[min(max(index - 1, 0), len(item.give_ammo) - 1)]
         res += item.ammo_address.get_write_list(ammo_v)
-    prev = await address.read(ctx)
-    res += address.get_write_list(prev & (~value))
     # Progressive overwrite fix
     if "progressive_overwrite" in item.tags and index > 1:
+        _, value = item.progressive[index-1]
         res += address.get_write_list(value)
+    else:
+        prev = await address.read(ctx)
+        res += address.get_write_list(prev & (~value))
+    print(f"Res rmp {res} {index}")
     return res
 
 async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
