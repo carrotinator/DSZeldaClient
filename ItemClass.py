@@ -1,5 +1,5 @@
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Awaitable
 from .subclasses import split_bits
 
 if TYPE_CHECKING:
@@ -165,7 +165,7 @@ class DSItem:
     # Basics
     address: "Address"
     value: int
-    size: int or str
+    size: int | str
     progressive: list[tuple["Address", int]]
     domain: str
     base_count: int  # If monotone_incremental, base amount of an item, ex. 12 for hearts
@@ -179,8 +179,9 @@ class DSItem:
     set_bit: list[tuple["Address", int]]
     set_bit_in_room: dict[int, list]
 
-    dungeon: int or bool  # dungeon stage
+    dungeon: int | bool  # dungeon stage
     ship: int  # index in constants.ships
+    blocked_scenes: list[int]  # scenes where sending that item would be problematic, like being location detection. Requires a flag to properly set the item on exiting scene.
 
     # Tags and flags
     dummy: bool
@@ -228,7 +229,7 @@ class DSItem:
             return remove_vanilla_progressive
         return remove_vanilla_normal
 
-    def receive_item(self, client: "DSZeldaClient", ctx: "BizHawkClientContext", num_received_items: int):
+    def receive_item(self, client: "DSZeldaClient", ctx: "BizHawkClientContext", num_received_items: int) -> Awaitable:
         return self.receive_item_func(client, ctx, self, num_received_items)
 
     def remove_vanilla(self, client: "DSZeldaClient", ctx: "BizHawkClientContext", num_received_items):

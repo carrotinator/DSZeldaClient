@@ -1184,7 +1184,7 @@ class DSZeldaClient(BizHawkClient):
         if self.last_vanilla_item and item_name == self.last_vanilla_item[-1] and "always_process" not in item_data.tags:
             self.last_vanilla_item.pop()
             print(f"oops it's vanilla or dummy! {self.last_vanilla_item}")
-        else:
+        elif self.current_scene not in getattr(item_data, "blocked_scenes", []):
             write_list += await item_data.receive_item(self, ctx, num_received_items)
 
         # Write the new item to memory!
