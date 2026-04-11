@@ -647,12 +647,15 @@ class DSZeldaClient(BizHawkClient):
 
         # Map warp
         elif getattr(self, "map_warp", None):
-            logger.info(f"Map warping to {self.map_warp.name}")
-            e_write_list, res = post_process(self.map_warp)
+            if res[0] == 0x25:
+                logger.info(f"Canceling map warp, you can't warp while entering TotOK")
+            else:
+                logger.info(f"Map warping to {self.map_warp.name}")
+                e_write_list, res = post_process(self.map_warp)
             self.map_warp = None
 
 
-        elif self.er_in_scene:
+        if self.er_in_scene and not e_write_list:
 
             # Determine Entrance Warp
             coords = await self.get_coords(ctx)
