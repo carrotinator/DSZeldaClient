@@ -8,9 +8,12 @@ if TYPE_CHECKING:
     except ImportError:
         pass
 
-async def read_multiple(ctx, addresses, signed=False, keys=None) -> dict["Address", int] or dict[str, int]:
+async def read_multiple(ctx, addresses, signed=False, keys=None, offset=0) -> dict["Address", int] or dict[str, int]:
     # print(f"\t reading {list(addresses)}")
-    reads = await bizhawk.read(ctx.bizhawk_ctx, [a.get_inner_read_list() for a in addresses])
+    read_list = [a.get_inner_read_list() for a in addresses]
+    if offset:
+        read_list = [(a+offset, *args) for a, *args in read_list]
+    reads = await bizhawk.read(ctx.bizhawk_ctx, read_list)
     reads = [int.from_bytes(r, "little", signed=signed) for r in reads]
     if keys:
         return {k: r for k, r in zip(keys, reads)}
