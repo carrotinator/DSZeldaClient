@@ -1530,11 +1530,20 @@ class DSZeldaClient(BizHawkClient):
                             return False
             return True
 
-        def check_entrance(loc):
+        async def check_entrance(loc):
             if "from_entrances" in loc:
                 if self.current_entrance not in loc["from_entrances"]:
                     self.locations_in_scene.pop(loc_name)
                     return False
+            if "from_coords" in loc:
+                coord_data = loc.get("from_coords", {})
+                coords = await self.get_coords(ctx)
+                print(f"\t\tLocation Coords: {coords} reqs {coord_data}")
+                return all([
+                    coord_data.get("x_max", 0xFFFFFFF) > coords['x'] > coord_data.get("x_min", -0xFFFFFFF),
+                    coord_data.get("y", 0) + 2000 > coords['y'] >= coord_data.get("y", 0),
+                    coord_data.get("z_max", 0xFFFFFFF) > coords['z'] > coord_data.get("z_min", -0xFFFFFFF),
+                ])
             return True
 
         if self.locations_in_scene is not None:
@@ -1546,8 +1555,8 @@ class DSZeldaClient(BizHawkClient):
                     print(f"\tLocation {loc_name} has the wrong slotdata.")
                     print_again = True
                     continue
-                if not check_entrance(location):
-                    print(f"\tLocation {loc_name} has the wrong entrance.")
+                if not await check_entrance(location):
+                    print(f"\tLocation {loc_name} has the wrong entrance or coordinates.")
                     print_again = True
                     continue
 
