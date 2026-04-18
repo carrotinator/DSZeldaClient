@@ -443,7 +443,6 @@ class DSZeldaClient(BizHawkClient):
                     self.precision_delay_flags = False
 
                 # Load potential entrance warp destinations, and dynamic entrances
-                self.er_in_scene = self.er_map.get(current_scene, dict())
                 await self._set_dynamic_entrances(ctx, current_scene)
 
                 print(f"Entered new scene {hex(current_scene)} with ER:")
@@ -808,6 +807,8 @@ class DSZeldaClient(BizHawkClient):
         return write_list
 
     async def _set_dynamic_entrances(self, ctx, scene):
+        self.er_in_scene = self.er_map.get(scene, dict())
+        self.er_messages.clear()
         if not self.dynamic_entrances_by_scene:
             self.dynamic_entrances_by_scene = build_scene_to_dynamic_entrance(ctx)
 
@@ -1197,6 +1198,9 @@ class DSZeldaClient(BizHawkClient):
         # print(f"Write list: {write_list}")
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
 
+        # Post Processes
+        if self.current_scene in getattr(item_data, "reload_entrances", []):
+            await self._set_dynamic_entrances(ctx, self.current_scene)
         await self.receive_item_post_processing(ctx, item_name, item_data)
     # Called when a stage has fully loaded
 
