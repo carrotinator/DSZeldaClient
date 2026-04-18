@@ -1538,10 +1538,10 @@ class DSZeldaClient(BizHawkClient):
             if "from_coords" in loc:
                 coord_data = loc.get("from_coords", {})
                 coords = await self.get_coords(ctx)
-                print(f"\t\tLocation Coords: {coords} reqs {coord_data}")
+                print(f"\tLocation Coords: {coords} reqs {coord_data}")
                 return all([
                     coord_data.get("x_max", 0xFFFFFFF) > coords['x'] > coord_data.get("x_min", -0xFFFFFFF),
-                    coord_data.get("y", 0) + 2000 > coords['y'] >= coord_data.get("y", 0),
+                    coord_data.get("y", coords['y']) + 2000 > coords['y'] >= coord_data.get("y", coords['y']),
                     coord_data.get("z_max", 0xFFFFFFF) > coords['z'] > coord_data.get("z_min", -0xFFFFFFF),
                 ])
             return True
