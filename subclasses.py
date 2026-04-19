@@ -146,7 +146,7 @@ class Address:
     async def unset_bits(self, ctx, value: int or list, silent=False, offset=0):
         if isinstance(value, int):
             value = split_bits(value, self.size)
-        prev = split_bits(await self.read(ctx, silent=silent), self.size)
+        prev = split_bits(await Address.from_pointer(self + offset, self.size).read(ctx, silent=silent), self.size)
         # print(f"Setting bits {self} {prev} {value} {[p | v for p, v in zip(prev, value)]}")
         return await self.overwrite(ctx, [p & (~v) for p, v in zip(prev, value)], silent=silent, offset=offset)
 

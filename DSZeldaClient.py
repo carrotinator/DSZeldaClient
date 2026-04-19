@@ -647,7 +647,7 @@ class DSZeldaClient(BizHawkClient):
 
         # Map warp
         elif getattr(self, "map_warp", None):
-            if res[0] == 0x25:
+            if res[0] == 0x25 and self.last_stage != 0x25:
                 logger.info(f"Canceling map warp, you can't warp while entering TotOK")
             else:
                 logger.info(f"Map warping to {self.map_warp.name}")
@@ -1498,7 +1498,7 @@ class DSZeldaClient(BizHawkClient):
         """
         return None
 
-    async def _load_local_locations(self, ctx, scene):
+    async def _load_local_locations(self, ctx: "BizHawkClientContext", scene):
         # Load locations in room into loop
         self.locations_in_scene = self.location_area_to_watches.get(scene, {}).copy()
         print(f"Locations in scene {hex(scene)}: {list(self.locations_in_scene.keys())}")
@@ -1533,44 +1533,51 @@ class DSZeldaClient(BizHawkClient):
                     return False
             return True
 
-        if self.locations_in_scene is not None:
-            # Create memory watches for checks triggerd by flags, and make list for checking sram
-            for loc_name, location in self.location_area_to_watches.get(scene, {}).items():
+        if self.locations_in_scene is None:
+            return
 
-                # Filter locations by slot data
-                if not check_slot_data(location):
-                    print(f"\tLocation {loc_name} has the wrong slotdata.")
-                    print_again = True
+        # Create memory watches for checks triggerd by flags, and make list for checking sram
+        for loc_name, location in self.location_area_to_watches.get(scene, {}).items():
+            loc_id = location['id']
+
+            # Remove unincluded locations
+            if location['id'] not in ctx.server_locations:
+                self.locations_in_scene.pop(loc_name)
+                continue
+
+            # Filter locations by slot data
+            if not check_slot_data(location):
+                print(f"\tLocation {loc_name} has the wrong slotdata.")
+                print_again = True
+                continue
+            if not check_entrance(location):
+                print(f"\tLocation {loc_name} has the wrong entrance.")
+                print_again = True
+                continue
+
+            if loc_id in locations_found and "address" in location:
+                read = await location["address"].read(ctx)
+                if read & location["value"] and "persistent" not in location:
+                    print(f"Location {loc_name} has already been found and triggered")
                     continue
-                if not check_entrance(location):
-                    print(f"\tLocation {loc_name} has the wrong entrance.")
-                    print_again = True
-                    continue
+            else:
+                if "sram_addr" in location and location["sram_addr"] is not None:
+                    active_srams.append((loc_name, location["sram_addr"], location["sram_value"]))
+                    sram_read_list.add(location["sram_addr"])
+                    print(f"\tCreated sram read for location {loc_name}")
 
-                loc_id = self.location_name_to_id[loc_name]
-                if loc_id in locations_found and "address" in location:
-                    read = await location["address"].read(ctx)
-                    if read & location["value"] and "persistent" not in location:
-                        print(f"Location {loc_name} has already been found and triggered")
-                        continue
-                else:
-                    if "sram_addr" in location and location["sram_addr"] is not None:
-                        active_srams.append((loc_name, location["sram_addr"], location["sram_value"]))
-                        sram_read_list.add(location["sram_addr"])
-                        print(f"\tCreated sram read for location {loc_name}")
+            if "address" in location:
+                self.watches[loc_name] = location["address"]
 
-                if "address" in location:
-                    self.watches[loc_name] = location["address"]
+        if print_again:
+            print(f"Loaded Locations in scene {hex(scene)}: {list(self.locations_in_scene.keys())}")
 
-            if print_again:
-                print(f"Loaded Locations in scene {hex(scene)}: {list(self.locations_in_scene.keys())}")
-
-            # Read and set locations missed when bizhawk was disconnected
-            if self.save_slot == 0 and len(sram_read_list) > 0:
-                sram_reads = await read_multiple(ctx, sram_read_list)
-                for loc_name, addr, _value in active_srams:
-                    if _value & sram_reads[addr]:
-                        await self._process_checked_locations(ctx, loc_name)
+        # Read and set locations missed when bizhawk was disconnected
+        if self.save_slot == 0 and len(sram_read_list) > 0:
+            sram_reads = await read_multiple(ctx, sram_read_list)
+            for loc_name, addr, _value in active_srams:
+                if _value & sram_reads[addr]:
+                    await self._process_checked_locations(ctx, loc_name)
 
 
     async def update_special_key_count(self, ctx, current_stage: int, new_keys:int, key_data: dict, key_values: dict, key_address: int) -> tuple[int, bool]:
