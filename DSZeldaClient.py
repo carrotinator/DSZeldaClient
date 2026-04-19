@@ -443,7 +443,6 @@ class DSZeldaClient(BizHawkClient):
                     self.precision_delay_flags = False
 
                 # Load potential entrance warp destinations, and dynamic entrances
-                self.er_in_scene = self.er_map.get(current_scene, dict())
                 await self._set_dynamic_entrances(ctx, current_scene)
 
                 print(f"Entered new scene {hex(current_scene)} with ER:")
@@ -808,6 +807,8 @@ class DSZeldaClient(BizHawkClient):
         return write_list
 
     async def _set_dynamic_entrances(self, ctx, scene):
+        self.er_in_scene = self.er_map.get(scene, dict())
+        self.er_messages.clear()
         if not self.dynamic_entrances_by_scene:
             self.dynamic_entrances_by_scene = build_scene_to_dynamic_entrance(ctx)
 
@@ -1197,6 +1198,9 @@ class DSZeldaClient(BizHawkClient):
         # print(f"Write list: {write_list}")
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
 
+        # Post Processes
+        if self.current_scene in getattr(item_data, "reload_entrances", []):
+            await self._set_dynamic_entrances(ctx, self.current_scene)
         await self.receive_item_post_processing(ctx, item_name, item_data)
     # Called when a stage has fully loaded
 
@@ -1526,11 +1530,20 @@ class DSZeldaClient(BizHawkClient):
                             return False
             return True
 
-        def check_entrance(loc):
+        async def check_entrance(loc):
             if "from_entrances" in loc:
                 if self.current_entrance not in loc["from_entrances"]:
                     self.locations_in_scene.pop(loc_name)
                     return False
+            if "from_coords" in loc:
+                coord_data = loc.get("from_coords", {})
+                coords = await self.get_coords(ctx)
+                print(f"\tLocation Coords: {coords} reqs {coord_data}")
+                return all([
+                    coord_data.get("x_max", 0xFFFFFFF) > coords['x'] > coord_data.get("x_min", -0xFFFFFFF),
+                    coord_data.get("y", coords['y']) + 2000 > coords['y'] >= coord_data.get("y", coords['y']),
+                    coord_data.get("z_max", 0xFFFFFFF) > coords['z'] > coord_data.get("z_min", -0xFFFFFFF),
+                ])
             return True
 
         if self.locations_in_scene is None:
@@ -1550,11 +1563,12 @@ class DSZeldaClient(BizHawkClient):
                 print(f"\tLocation {loc_name} has the wrong slotdata.")
                 print_again = True
                 continue
-            if not check_entrance(location):
+            if not await check_entrance(location):
                 print(f"\tLocation {loc_name} has the wrong entrance.")
                 print_again = True
                 continue
 
+            loc_id = self.location_name_to_id[loc_name]
             if loc_id in locations_found and "address" in location:
                 read = await location["address"].read(ctx)
                 if read & location["value"] and "persistent" not in location:

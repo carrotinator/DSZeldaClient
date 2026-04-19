@@ -193,6 +193,7 @@ class DSItem:
 
     disconnect_entrances: list[str]  # list of entrances to attempt to disconnect on receive
     hint_on_receive: list[str]  # list of items to hint for on receive
+    reload_entrances: list[int]  # list of scenes on which to recalculate dynamic entrances when receiving item there.
 
     def __init__(self, name, data, all_items):
         self.data = data
