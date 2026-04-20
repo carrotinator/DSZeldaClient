@@ -83,7 +83,7 @@ class DSZeldaClient(BizHawkClient):
 
         self.last_scene = None
         self.locations_in_scene = {}
-        self.watches = {}
+        self.watches: dict[str, Address] = {}
         self.receiving_location = False
         self.last_vanilla_item: list[str | list[tuple[str, int]]] = []
         self.delay_reset = False
@@ -1040,7 +1040,7 @@ class DSZeldaClient(BizHawkClient):
                 loc_name, location = loc
                 loc_bytes = self.location_name_to_id[loc_name]
 
-                if "address" in location or self.cancel_location_read(location):
+                if "address" in location or "read_object" in location or self.cancel_location_read(location):
                     location = None
                     continue
 
@@ -1077,7 +1077,7 @@ class DSZeldaClient(BizHawkClient):
                     await addr.set_bits(ctx, bit)
 
             # Delay reset of vanilla item from certain address reads
-            if "delay_reset" in location:
+            if "delay_reset" in location or "read_object" in location:
                 self.delay_reset = 1
                 print(f"Started Delay Reset for {self.last_vanilla_item}")
 
@@ -1502,6 +1502,16 @@ class DSZeldaClient(BizHawkClient):
         """
         return None
 
+    async def get_object_read_addr(self, ctx, location) -> Address | None:
+        """
+        Called while loading local locations if location has `read_object` attribute.
+        For making chest read objects to avoid conflicts
+        :param ctx:
+        :param location:
+        :return:
+        """
+        return None
+
     async def _load_local_locations(self, ctx: "BizHawkClientContext", scene):
         # Load locations in room into loop
         self.locations_in_scene = self.location_area_to_watches.get(scene, {}).copy()
@@ -1554,7 +1564,7 @@ class DSZeldaClient(BizHawkClient):
             loc_id = location['id']
 
             # Remove unincluded locations
-            if location['id'] not in ctx.server_locations:
+            if loc_id not in ctx.server_locations:
                 self.locations_in_scene.pop(loc_name)
                 continue
 
@@ -1568,7 +1578,10 @@ class DSZeldaClient(BizHawkClient):
                 print_again = True
                 continue
 
-            loc_id = self.location_name_to_id[loc_name]
+            if "read_object" in location:
+                self.watches[loc_name] = await self.get_object_read_addr(ctx, location)
+                if self.watches[loc_name]:
+                    continue
             if loc_id in locations_found and "address" in location:
                 read = await location["address"].read(ctx)
                 if read & location["value"] and "persistent" not in location:
