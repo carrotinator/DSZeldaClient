@@ -329,7 +329,6 @@ class DSZeldaClient(BizHawkClient):
             self._loaded_menu_read_list = True
 
         try:
-
             # Read main read list
             self.read_result = read_result = await read_multiple(ctx, self.main_read_list)
 
@@ -989,7 +988,7 @@ class DSZeldaClient(BizHawkClient):
             print(f"\t{data['name']} does not have slot data reqs")
             return False
         if not check_last_room(data):
-            print(f"\t{data['name']} came from wrong room {hex(self.last_scene)}")
+            print(f"\t{data['name']} came from wrong room {self.last_scene}")
             return False
         if not await check_bits(data):
             print(f"\t{data['name']} is missing bits")
