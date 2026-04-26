@@ -27,7 +27,7 @@ class DSZeldaClient(BizHawkClient):
     item_id_to_name: Dict[int, str]
     location_name_to_id: Dict[str, int]
     location_area_to_watches: Dict[int, dict[str, dict]]
-    watches: Dict[str, tuple[int, int, str]]
+    watches: Dict[str, "Address"]
     item_data: dict[str, "DSItem"]
 
     addr_game_state: "Address"
@@ -996,6 +996,7 @@ class DSZeldaClient(BizHawkClient):
         if not await self.has_special_dynamic_requirements(ctx, data):
             return False
         if not has_entrance(data):
+            print(f"\t{data['name']} has the wrong entrance")
             return False
 
         return True
@@ -1578,9 +1579,10 @@ class DSZeldaClient(BizHawkClient):
                 continue
 
             if "read_object" in location:
-                self.watches[loc_name] = await self.get_object_read_addr(ctx, location)
-                if self.watches[loc_name]:
+                watch_addr = await self.get_object_read_addr(ctx, location)
+                if not watch_addr:
                     continue
+                self.watches[loc_name] = watch_addr
             if loc_id in locations_found and "address" in location:
                 read = await location["address"].read(ctx)
                 if read & location["value"] and "persistent" not in location:
