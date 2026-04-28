@@ -117,7 +117,7 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
 async def remove_vanilla_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     address = client.key_address = await client.get_small_key_address(ctx)
     prev_value = await address.read(ctx)
-    return address.get_write_list(prev_value-1)
+    return address.get_write_list(max(prev_value-1, 0))
 
 async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     res = []
