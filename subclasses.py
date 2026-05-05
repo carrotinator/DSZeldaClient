@@ -301,14 +301,14 @@ class DSTransition:
 
     def detect_exit(self, scene, entrance, coords, y_offest):
         if self.detect_exit_scene(scene, entrance):
-            if entrance < 0xF0:
+            if entrance < 0xF0 and not hasattr(self, "extra_data"):
                 return True
             # Continuous entrance check
             x_max = self.extra_data.get("x_max", 0x8FFFFFFF)
             x_min = self.extra_data.get("x_min", -0x8FFFFFFF)
             z_max = self.extra_data.get("z_max", 0x8FFFFFFF)
             z_min = self.extra_data.get("z_min", -0x8FFFFFFF)
-            y = self.coords[1] if self.coords else coords["y"] - y_offest
+            y = self.coords[1] if self.coords else self.extra_data.get("y", coords["y"]) - y_offest
             print(f"Checking entrance {self.name}")
             print(f"\tx: {x_max} > {coords['x']} > {x_min}")
             print(f"\ty: {y + 1000} > {y} > {coords['y'] - y_offest}")
