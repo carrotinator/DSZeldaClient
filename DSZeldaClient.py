@@ -1803,3 +1803,94 @@ class DSZeldaClient(BizHawkClient):
             print(f"fetched last saved scene: {last_saved_scene}")
             self.last_saved_scene = last_saved_scene if self.lss_retry_attempts >= 0 else 0 # if last_saved_scene is not None else False
             self.lss_retry_attempts -= 1
+
+    @staticmethod
+    async def find_table_object(ctx: "BizHawkClientContext", start_offset: int,
+                                check_offset, comp_value: int | list,
+                                size=4,
+                                table_addr: Address = None,
+                                return_index=False, max_search: int = 35) -> Address | tuple[Address, int] | None:
+        """
+        Find a specific object from a pointer table.
+        Loops backwards from start_offset until the validation check matches.
+        :param ctx: BizhawkContext
+        :param start_offset: largest offset in the table the object you want can be found in
+        :param check_offset: offset in the object data to use for validation
+        :param comp_value: what check offset needs to equal to validate the object
+        :param table_addr: Address for the start of the table to search through
+        :param size: size of the comp value read
+        :param return_index: return the table index that the correct object was found at along with the object data address
+        :param max_search: How far to search. -1 checks the entire table
+        :return: Address of valid object, or tuple of Address and table index
+        """
+
+        async def check_multi(l) -> tuple[Address | None, int]:
+            read_list = [Address.from_pointer(table_addr + 4 * (offset - _i), size=3) for _i in range(l)]
+            objects = (await read_multiple(ctx, read_list)).values()
+            objects = [a for a in objects if a]
+            checks = await read_multiple(ctx,
+                                         [Address.from_pointer(a + int(check_offset * 4), size=size) for a in objects])
+            _i = 0
+            print(f"\tobjects: {[hex(o) for o in objects]}")
+            print(f"\tchecks: {checks}")
+            for _i, check in enumerate(zip(objects, checks.values())):
+                o, c = check
+                print(f"\t\tcomparing: {c} == {comp_value}")
+                if (isinstance(comp_value, list) and c in comp_value) or c == comp_value:
+                    return Address.from_pointer(o, size=3), _i
+            return None, _i
+
+        check_list = list(range(start_offset + 1))
+        check_list.reverse()
+        batch_size = 8
+        for chunk, offset in enumerate(check_list[:max_search:batch_size]):
+            remaining = min(len(check_list[chunk * batch_size:]), batch_size)
+            ret, chunk_index = await check_multi(remaining)
+            if ret:
+                return (ret, offset - chunk_index) if return_index else ret
+        print(f"Could not find matching map object, probably restarted client in already loaded room.")
+        return (None, 0) if return_index else None
+
+    async def set_chest_contents(self, ctx):
+        write_list = []
+        set_shop = False
+        for loc, data in self.locations_in_scene.items():
+            model = ctx.slot_data.get("location_models", {}).get(str(data["id"]), 0x1E)
+            chest_offset = data.get("chest_offset", None)
+            gift_addr = data.get("gift_addr", None)
+
+            if gift_addr is not None:
+                # print("gift_addr", isinstance(gift_addr, str), gift_addr, loc)
+                if isinstance(gift_addr, str) and gift_addr == "island_shop":
+                    # Shops are special
+                    if set_shop:
+                        continue
+                    shop_lookup = {0xB: 0x26e324, 0xC: 0x263964, 0x10: 0x2692d4}
+                    shop_addr = Address.from_pointer(shop_lookup[self.current_stage])
+                    vanilla_item = await shop_addr.read(ctx, silent=True)
+                    print(f"Shop item lookup: {shop_addr} {vanilla_item} {shop_location_lookup.get(vanilla_item)}")
+                    if shop_location_lookup.get(vanilla_item) == loc:
+                        write_list.append(shop_addr.get_inner_write_list(model))
+                        set_shop = True
+                    continue
+
+                gift_addr: list[Address] = gift_addr if isinstance(gift_addr, list) else [gift_addr]
+                for addr in gift_addr:
+                    print(f"\tSetting read item model: {loc} {hex(model)}")
+                    write_list.append(addr.get_inner_write_list(model))
+
+            elif chest_offset is not None:
+                # Farmable locations set treasure
+                if "farmable" in data and data["id"] in ctx.checked_locations:
+                    model = 0x7D
+                vanilla_item_model = self.item_data[data["vanilla_item"]].vanilla_model
+                print(f"\tVanilla model {vanilla_item_model} offsets {chest_offset}")
+                chest_obj = await self.find_table_object(ctx, chest_offset, 9, vanilla_item_model, size=1)
+                if chest_obj:
+                    chest_content_addr = Address.from_pointer(chest_obj + 9 * 4, 1)
+                    write_list.append(chest_content_addr.get_inner_write_list(model))
+                    print(f"Writing {model} to addr {chest_content_addr} for loc {loc}")
+                else:
+                    print(f"Could not find chests for item swapping, probably restarted client in already loaded room.")
+
+        await bizhawk.write(ctx.bizhawk_ctx, write_list)

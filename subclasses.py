@@ -190,6 +190,9 @@ class Address:
     def __le__(self, other):
         return self.addr <= other
 
+    def __int__(self):
+        return self.addr
+
     @classmethod
     def pointer(cls, addr, name=""):
         """Pointer from Data TCM"""
