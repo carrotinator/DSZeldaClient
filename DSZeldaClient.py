@@ -1569,6 +1569,7 @@ class DSZeldaClient(BizHawkClient):
             return True
 
         if self.locations_in_scene is None:
+            print(f"\tNo locations in scene")
             return
 
         # Create memory watches for checks triggerd by flags, and make list for checking sram
@@ -1576,8 +1577,9 @@ class DSZeldaClient(BizHawkClient):
             loc_id = location['id']
 
             # Remove unincluded locations
-            if loc_id not in ctx.server_locations:
+            if "slot_data" not in location and loc_id not in ctx.server_locations:
                 self.locations_in_scene.pop(loc_name)
+                print_again = True
                 continue
 
             # Filter locations by slot data
