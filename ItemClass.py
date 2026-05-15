@@ -1,5 +1,5 @@
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Awaitable
 from .subclasses import split_bits
 
 if TYPE_CHECKING:
@@ -117,22 +117,25 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
 async def remove_vanilla_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     address = client.key_address = await client.get_small_key_address(ctx)
     prev_value = await address.read(ctx)
-    return address.get_write_list(prev_value-1)
+    return address.get_write_list(max(prev_value-1, 0))
 
 async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     res = []
-    index = client.item_count(ctx, item.name, num_received_items)
+    index = client.item_count(ctx, item.name)
     if index >= len(item.progressive):
         return res
     address, value = item.progressive[index]
     if hasattr(item, "give_ammo"):
         ammo_v = item.give_ammo[min(max(index - 1, 0), len(item.give_ammo) - 1)]
         res += item.ammo_address.get_write_list(ammo_v)
-    prev = await address.read(ctx)
-    res += address.get_write_list(prev & (~value))
     # Progressive overwrite fix
     if "progressive_overwrite" in item.tags and index > 1:
+        _, value = item.progressive[index-1]
         res += address.get_write_list(value)
+    else:
+        prev = await address.read(ctx)
+        res += address.get_write_list(prev & (~value))
+    print(f"Res rmp {res} {index}")
     return res
 
 async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
@@ -144,9 +147,7 @@ async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientCont
         value = 9999 - prev_value if prev_value + value > 9999 else value
         value = prev_value if prev_value-value < 0 else value
     if "incremental" or "monotone_incremental" in item.tags:
-        if prev_value - value < 0: print(f"TRIED TO UNDERFLOW {item.name}")
-        value = prev_value if prev_value - value < 0 else prev_value - value
-
+        value = max(prev_value - value, 0)
     else:
         value = prev_value & (~value)
 
@@ -162,7 +163,7 @@ class DSItem:
     # Basics
     address: "Address"
     value: int
-    size: int or str
+    size: int | str
     progressive: list[tuple["Address", int]]
     domain: str
     base_count: int  # If monotone_incremental, base amount of an item, ex. 12 for hearts
@@ -176,8 +177,9 @@ class DSItem:
     set_bit: list[tuple["Address", int]]
     set_bit_in_room: dict[int, list]
 
-    dungeon: int or bool  # dungeon stage
+    dungeon: int | bool  # dungeon stage
     ship: int  # index in constants.ships
+    blocked_scenes: list[int]  # scenes where sending that item would be problematic, like being location detection. Requires a flag to properly set the item on exiting scene.
 
     # Tags and flags
     dummy: bool
@@ -189,6 +191,7 @@ class DSItem:
 
     disconnect_entrances: list[str]  # list of entrances to attempt to disconnect on receive
     hint_on_receive: list[str]  # list of items to hint for on receive
+    reload_entrances: list[int]  # list of scenes on which to recalculate dynamic entrances when receiving item there.
 
     def __init__(self, name, data, all_items):
         self.data = data
@@ -225,7 +228,7 @@ class DSItem:
             return remove_vanilla_progressive
         return remove_vanilla_normal
 
-    def receive_item(self, client: "DSZeldaClient", ctx: "BizHawkClientContext", num_received_items: int):
+    def receive_item(self, client: "DSZeldaClient", ctx: "BizHawkClientContext", num_received_items: int) -> Awaitable:
         return self.receive_item_func(client, ctx, self, num_received_items)
 
     def remove_vanilla(self, client: "DSZeldaClient", ctx: "BizHawkClientContext", num_received_items):

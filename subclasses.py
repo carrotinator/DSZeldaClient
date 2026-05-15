@@ -8,9 +8,12 @@ if TYPE_CHECKING:
     except ImportError:
         pass
 
-async def read_multiple(ctx, addresses, signed=False, keys=None) -> dict["Address", int] or dict[str, int]:
+async def read_multiple(ctx, addresses, signed=False, keys=None, offset=0) -> dict["Address", int] or dict[str, int]:
     # print(f"\t reading {list(addresses)}")
-    reads = await bizhawk.read(ctx.bizhawk_ctx, [a.get_inner_read_list() for a in addresses])
+    read_list = [a.get_inner_read_list() for a in addresses]
+    if offset:
+        read_list = [(a+offset, *args) for a, *args in read_list]
+    reads = await bizhawk.read(ctx.bizhawk_ctx, read_list)
     reads = [int.from_bytes(r, "little", signed=signed) for r in reads]
     if keys:
         return {k: r for k, r in zip(keys, reads)}
@@ -143,7 +146,7 @@ class Address:
     async def unset_bits(self, ctx, value: int or list, silent=False, offset=0):
         if isinstance(value, int):
             value = split_bits(value, self.size)
-        prev = split_bits(await self.read(ctx, silent=silent), self.size)
+        prev = split_bits(await Address.from_pointer(self + offset, self.size).read(ctx, silent=silent), self.size)
         # print(f"Setting bits {self} {prev} {value} {[p | v for p, v in zip(prev, value)]}")
         return await self.overwrite(ctx, [p & (~v) for p, v in zip(prev, value)], silent=silent, offset=offset)
 
@@ -186,6 +189,9 @@ class Address:
 
     def __le__(self, other):
         return self.addr <= other
+
+    def __int__(self):
+        return self.addr
 
     @classmethod
     def pointer(cls, addr, name=""):
@@ -298,14 +304,14 @@ class DSTransition:
 
     def detect_exit(self, scene, entrance, coords, y_offest):
         if self.detect_exit_scene(scene, entrance):
-            if entrance < 0xF0:
+            if entrance < 0xF0 and not hasattr(self, "extra_data"):
                 return True
             # Continuous entrance check
             x_max = self.extra_data.get("x_max", 0x8FFFFFFF)
             x_min = self.extra_data.get("x_min", -0x8FFFFFFF)
             z_max = self.extra_data.get("z_max", 0x8FFFFFFF)
             z_min = self.extra_data.get("z_min", -0x8FFFFFFF)
-            y = self.coords[1] if self.coords else coords["y"] - y_offest
+            y = self.coords[1] if self.coords else self.extra_data.get("y", coords["y"]) - y_offest
             print(f"Checking entrance {self.name}")
             print(f"\tx: {x_max} > {coords['x']} > {x_min}")
             print(f"\ty: {y + 1000} > {y} > {coords['y'] - y_offest}")
