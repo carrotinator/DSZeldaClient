@@ -23,6 +23,7 @@ print_debug: list[str] = []
 
 def printl(s, silent=False) -> None:
     s = str(s)
+    s = s.replace("\t", "  ")
     if not silent:
         print(s)
     print_debug.append(s)
