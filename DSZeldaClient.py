@@ -21,6 +21,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger("Client")
 print_debug: list[str] = []
 
+def hex_f(i):
+    """hex() but can handle all datatype exceptions recursively"""
+    if isinstance(i, int):
+        return hex(i)
+    if isinstance(i, dict):
+        return {hex_f(k): hex_f(v) for k, v in i.items()}
+    if isinstance(i, Iterable) and not isinstance(i, str):
+        return [hex_f(j) for j in i]
+    return i
+
 def printl(s, silent=False) -> None:
     s = str(s)
     s = s.replace("\t", "  ")
@@ -586,7 +596,7 @@ class DSZeldaClient(BizHawkClient):
         printl(f"New game, setting starting flags for slot {ctx.slot}")
         for adr, _value in STARTING_FLAGS:
             write_list += adr.get_write_list(_value)
-        printl(f"normal flags wl: {write_list}")
+        printl(f"normal flags wl: {hex_f(write_list)}")
         write_list += await self.set_special_starting_flags(ctx)
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
 
