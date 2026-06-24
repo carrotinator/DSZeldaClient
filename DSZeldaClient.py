@@ -20,11 +20,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Client")
 
+def get_version() -> str:
+    import json
+    import pkgutil
+    print(f"Name: {__name__}")
+    root = __name__.split(".DSZeldaClient")[0]
+    return json.loads(pkgutil.get_data(root, "archipelago.json").decode())["world_version"]
 
 def cmd_carrot_asked(self: "BizHawkClientCommandProcessor"):
     """Prints debug info from the current scene. Same info as in the debug client."""
+    from Utils import __version__
     for s in print_debug:
         logger.info(s)
+    logger.info(f"Current APWorld Version: {get_version()}")
+    logger.info(f"Current Archipelago Version: {__version__}")
     return True
 
 class DSZeldaClient(BizHawkClient):
