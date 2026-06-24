@@ -8,7 +8,7 @@ import worlds._bizhawk as bizhawk
 from worlds._bizhawk.client import BizHawkClient
 from ..data.Constants import *
 from ..Util import *
-from .subclasses import read_multiple, write_multiple, storage_key, get_stored_data
+from .subclasses import read_multiple, write_multiple, storage_key, get_stored_data, hex_f, printl, print_debug
 
 from ..data.Addresses import *
 
@@ -19,24 +19,7 @@ if TYPE_CHECKING:
     from .subclasses import Address
 
 logger = logging.getLogger("Client")
-print_debug: list[str] = []
 
-def hex_f(i):
-    """hex() but can handle all datatype exceptions recursively"""
-    if isinstance(i, int):
-        return hex(i)
-    if isinstance(i, dict):
-        return {hex_f(k): hex_f(v) for k, v in i.items()}
-    if isinstance(i, Iterable) and not isinstance(i, str):
-        return [hex_f(j) for j in i]
-    return i
-
-def printl(s, silent=False) -> None:
-    s = str(s)
-    s = s.replace("\t", "  ")
-    if not silent:
-        print(s)
-    print_debug.append(s)
 
 def cmd_carrot_asked(self: "BizHawkClientCommandProcessor"):
     """Prints debug info from the current scene. Same info as in the debug client."""
