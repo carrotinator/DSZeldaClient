@@ -1352,7 +1352,7 @@ class DSZeldaClient(BizHawkClient):
             await self.process_fast(ctx, read_result)
 
         # Read for checks on specific global flags
-        if len(self.watches) > 0:
+        if not self.receiving_location and len(self.watches) > 0:
             triggered_watches = []
             watch_result = await read_multiple(ctx, self.watches.values(), keys=self.watches.keys())
             for loc_name, prev_value in watch_result.items():
@@ -1381,6 +1381,7 @@ class DSZeldaClient(BizHawkClient):
 
         # Exit location received cs
         if self.receiving_location and not self.getting_location:
+            printl(f"Exiting location receive cs")
             self.receiving_location = False
 
             # Increment delay reset, probably haven't received item yet
