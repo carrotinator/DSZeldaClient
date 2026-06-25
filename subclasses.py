@@ -138,7 +138,7 @@ class Address:
         read_result = await self.read_bytes(ctx)
         res = sum([int.from_bytes(b, "little", signed=signed)<<(8*i) for i, b in enumerate(read_result)])
         if not silent:
-            printl(f"\tReading address {self}, got value {res}")
+            printl(f"\tReading address {self}, got value {hex_f(res)}")
         return res
 
     async def read_bytes(self, ctx):
@@ -148,7 +148,7 @@ class Address:
         if isinstance(value, int):
             value = split_bits(value, self.size)
         if not silent:
-            printl(f"\tWriting to address {self} with value {value}")
+            printl(f"\tWriting to address {self} with value {hex_f(value)}")
         return await bizhawk.write(ctx.bizhawk_ctx, [(self.addr+offset, value, self.domain)])
 
     async def add(self, ctx, value: int, silent=False, offset=0):

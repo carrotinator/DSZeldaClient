@@ -824,7 +824,7 @@ class DSZeldaClient(BizHawkClient):
 
         # Write
         write_list = [a.get_inner_write_list(v) for a, v in prev.items()]
-        printl(f"writes: {[(hex(a), hex(v[0])) for a, v, _ in write_list]}")
+        printl(f"writes: {[(hex_f(a), hex_f(v)) for a, v, _ in write_list]}")
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
         return write_list
 
