@@ -172,7 +172,7 @@ class Address:
 
 
     def __repr__(self, region="eu"):
-        return f"Address Object {hex(self.get_address(region))} {self.name}"
+        return f"Address Object {hex_f(self.get_address(region))} {self.name}"
 
     def __str__(self):
         name = f"{self.name}: " if self.name else ""

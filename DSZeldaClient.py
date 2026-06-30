@@ -144,7 +144,7 @@ class DSZeldaClient(BizHawkClient):
         self.last_dungeon_warp_target = None
         self.tried_short_cs = False
 
-        self.precision_mode = None
+        self.precision_mode = None  # [address_to_precision_read, compare_value, *precision_operation_data]
         self.precision_operation = None
         self.heal_on_load = False
         self.precision_delay_flags = False
@@ -158,6 +158,13 @@ class DSZeldaClient(BizHawkClient):
 
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
+
+    def has_from_group(self, ctx, group_name: str) -> bool:
+        printl(f"Checking for items in group {group_name} {ITEM_GROUPS[group_name]}")
+        for i in ITEM_GROUPS[group_name]:
+            if self.item_count(ctx, i):
+                return True
+        return False
 
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
         try:
@@ -327,8 +334,7 @@ class DSZeldaClient(BizHawkClient):
             if precision_read == self.precision_mode[1]:
                 printl(f"Precision read, not yet")
                 ctx.watcher_timeout = 0.01
-                await bizhawk.unlock(ctx.bizhawk_ctx)
-                await bizhawk.lock(ctx.bizhawk_ctx)
+                await self.frame_advance(ctx)
                 return
             printl(f"Trigger activated!")
             if await self.precision_backup(ctx, precision_read):
@@ -446,7 +452,7 @@ class DSZeldaClient(BizHawkClient):
             if self._entered_entrance and loading_scene:
                 self._loading_scene = True  # Second phase of loading room
                 self._entered_entrance = False
-                printl(f"Loading Scene {hex(self.current_scene) if self.current_scene else self.current_scene}, setting coords {self.er_exit_coord_writes}")
+                printl(f"Loading Scene {hex_f(self.current_scene)}, setting coords {self.er_exit_coord_writes}")
                 await self._set_er_coords(ctx)
 
             # Fully loaded room
@@ -1918,3 +1924,8 @@ class DSZeldaClient(BizHawkClient):
                     printl(f"Could not find chests for item swapping, probably restarted client in already loaded room.")
 
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
+
+    @staticmethod
+    async def frame_advance(ctx):
+        await bizhawk.unlock(ctx.bizhawk_ctx)
+        await bizhawk.lock(ctx.bizhawk_ctx)
