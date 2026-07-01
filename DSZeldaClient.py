@@ -448,12 +448,16 @@ class DSZeldaClient(BizHawkClient):
                 await self.process_in_game(ctx, read_result)
                 self._just_entered_game = False
 
+            if self._loading_scene == 1 and loading:  # delay 1 cycle to avoid writing coords too early
+                printl(f"Loading Scene 2 {hex_f(self.current_scene)}, setting coords {hex_f(self.er_exit_coord_writes)}")
+                await self._set_er_coords(ctx)
+                self._loading_scene = 2
+
             # Started actual scene loading
             if self._entered_entrance and loading_scene:
-                self._loading_scene = True  # Second phase of loading room
+                self._loading_scene = 1  # Second phase of loading room
                 self._entered_entrance = False
-                printl(f"Loading Scene {hex_f(self.current_scene)}, setting coords {self.er_exit_coord_writes}")
-                await self._set_er_coords(ctx)
+                printl(f"Loading Scene {hex_f(self.current_scene)}")
 
             # Fully loaded room
             if self._loading_scene and not loading:
@@ -709,7 +713,7 @@ class DSZeldaClient(BizHawkClient):
 
 
         if e_write_list:
-            printl(f"Writing entrance warp {e_write_list}")
+            printl(f"Writing entrance warp {hex_f(e_write_list)}")
             await bizhawk.write(ctx.bizhawk_ctx, e_write_list)
         if defer_entrance:
             await self.store_visited_entrances(ctx, detect_data, exit_data, defer_entrance)
@@ -1605,7 +1609,7 @@ class DSZeldaClient(BizHawkClient):
             loc_id = location['id']
 
             # Remove unincluded locations
-            if "slot_data" not in location and loc_id not in ctx.server_locations:
+            if "slot_data" not in location and loc_id not in ctx.server_locations and "always_exist" not in location:
                 self.locations_in_scene.pop(loc_name)
                 print_again = True
                 continue
