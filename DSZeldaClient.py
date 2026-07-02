@@ -1582,6 +1582,14 @@ class DSZeldaClient(BizHawkClient):
                         if slot not in value:
                             self.locations_in_scene.pop(loc_name)
                             return False
+            elif "any_slot_data" in loc:
+                for slot, value, *args in location["any_slot_data"]:
+                    slot = ctx.slot_data.get(slot, None)
+                    value = value if isinstance(value, list) else [value]
+                    if slot in value:
+                        return True
+                self.locations_in_scene.pop(loc_name)
+                return False
             return True
 
         async def check_entrance(loc):
