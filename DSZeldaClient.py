@@ -155,6 +155,7 @@ class DSZeldaClient(BizHawkClient):
         self.cycle_counter: int = 0
         self.set_starting_flags = False
         self.delay_pickup_remove_vanilla = False
+        self._delay_room_action: int = 5
 
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
@@ -502,6 +503,7 @@ class DSZeldaClient(BizHawkClient):
 
                 # Hard coded room stuff
                 await self.process_hard_coded_rooms(ctx, current_scene)
+                self._delay_room_action = 5
 
                 self.last_stage = current_stage
                 self.last_scene = current_scene
@@ -1362,6 +1364,12 @@ class DSZeldaClient(BizHawkClient):
 
             await self.process_slow(ctx, read_result)
 
+            # Set up delay room action
+            if self._delay_room_action:
+                self._delay_room_action -= 1
+                if self._delay_room_action <= 0:
+                    await self.delay_room_action(ctx)
+
         # Fast stuff doesn't happen until starting flags are set
         if not self.set_starting_flags:
             return
@@ -1463,15 +1471,22 @@ class DSZeldaClient(BizHawkClient):
 
         await self.detect_warp_to_start(ctx, read_result)
 
+    async def process_fast(self, ctx: "BizHawkClientContext", read_result: dict):
+        """
+        Gets called every 5 cycles in game, or every 0.5 seconds
+        """
+        pass
+
     async def process_slow(self, ctx: "BizHawkClientContext", read_result: dict):
         """
         Gets called every 19 cycles in game, or every 2 seconds
         """
         pass
 
-    async def process_fast(self, ctx: "BizHawkClientContext", read_result: dict):
+    async def delay_room_action(self, ctx: "BizHawkClientContext"):
         """
-        Gets called every 5 cycles in game, or every 0.5 seconds
+        Gets called on a new room 5 slow cycles after entering.
+        For triggering pesky stuff that takes a while. Not watertight, but works.
         """
         pass
 
@@ -1624,7 +1639,7 @@ class DSZeldaClient(BizHawkClient):
 
             # Filter locations by slot data
             if not check_slot_data(location):
-                printl(f"\tLocation {loc_name} has the wrong slotdata.")
+                # printl(f"\tLocation {loc_name} has the wrong slotdata.")
                 print_again = True
                 continue
             if not await check_entrance(location):
