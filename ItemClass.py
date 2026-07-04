@@ -111,7 +111,14 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
 
     # Handle special item conditions
     if hasattr(item, "give_ammo"):
-        res += item.ammo_address.get_write_list(item.give_ammo[prog_received])
+        if hasattr(item, "variant_prog"):
+            if item.name == item.variant_prog[1] or client.item_count(ctx, item.variant_prog[1]):
+                ammo_list = client.item_data[item.variant_prog[0]].give_ammo
+                prog = min(len(ammo_list)-1, client.item_count(ctx, item.variant_prog[2]))
+                res += item.ammo_address.get_write_list(ammo_list[prog])
+        else:
+            prog_received = min(prog_received, len(item.give_ammo)-1)
+            res += item.ammo_address.get_write_list(item.give_ammo[prog_received])
     if hasattr(item, "set_bit"):
         for adr, bit in item.set_bit:
             bit_prev = await adr.read(ctx)
@@ -126,7 +133,12 @@ async def remove_vanilla_small_key(client: "DSZeldaClient", ctx: "BizHawkClientC
 
 async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     res = []
-    index = client.item_count(ctx, item.name)
+
+    if hasattr(item, "variant") and client.item_count(ctx, item.variant[0]):
+        index = 1 + client.item_count(ctx, item.variant[1])
+    else:
+        index = client.item_count(ctx, item.name)
+
     if index >= len(item.progressive):
         return res
     address, value = item.progressive[index]
@@ -180,6 +192,8 @@ class DSItem:
     ammo_address: "Address"
     give_ammo: list[int]  # Ammo amount for each upgrade stage
     refill: str  # item reference for refill data
+    variant: list[str]  # progressive items that have non-progressive counterparts, for vanilla removal
+    variant_prog: list[str]  # for non-progressive items to calc ammo
 
     # Extra bits
     set_bit: list[tuple["Address", int]]
