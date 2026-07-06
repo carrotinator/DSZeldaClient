@@ -694,7 +694,7 @@ class DSZeldaClient(BizHawkClient):
             for detect_data, exit_data in self.er_in_scene.items():
                 # printl(f"trying to detect ER {res} {detect_data.entrance} {detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest)}")
                 if detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest):
-                    if await self.conditional_er(ctx, exit_data):
+                    if await self.conditional_er(ctx, exit_data, detect_data=detect_data):
                         printl(f"Detected entrance: {detect_data} => {exit_data}")
                         e_write_list, res = post_process(exit_data)
                         defer_entrance = "traverse"
@@ -755,12 +755,14 @@ class DSZeldaClient(BizHawkClient):
         :return:
         """
 
-    async def conditional_er(self, ctx, exit_data, silent=False) -> bool:
+    async def conditional_er(self, ctx, exit_data, silent=False, detect_data=None) -> bool:
         """
         for handling custom conditional ER statements.
         If return false, ER will pop you back out the entrance you came from
         :param ctx:
         :param exit_data:
+        :param silent:
+        :param detect_data:
         :return:
         """
         return True
