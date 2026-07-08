@@ -1883,12 +1883,15 @@ class DSZeldaClient(BizHawkClient):
         :return: Address of valid object, or tuple of Address and table index
         """
 
+        print(f"Checking multiple addresses: {start_offset}, "
+        f"{check_offset}, {comp_value}, {hex_f(table_addr)}")
+
         async def check_multi(l) -> tuple[Address | None, int]:
             read_list = [Address.from_pointer(table_addr + 4 * (offset - _i), size=3) for _i in range(l)]
             objects = (await read_multiple(ctx, read_list)).values()
-            objects = [a for a in objects if a]
-            checks = await read_multiple(ctx,
-                                         [Address.from_pointer(a + int(check_offset * 4), size=size) for a in objects])
+            objects = [a for a in objects if 0x400000 > a > 0]
+            print(f"search objects: {hex_f(objects)}")
+            checks = await read_multiple(ctx, [Address.from_pointer(a + int(check_offset * 4), size=size) for a in objects])
             _i = 0
             printl(f"\tobjects: {[hex(o) for o in objects]}")
             printl(f"\tchecks: {checks}")
