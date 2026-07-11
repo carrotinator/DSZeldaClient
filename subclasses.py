@@ -5,6 +5,7 @@ import worlds._bizhawk as bizhawk
 if TYPE_CHECKING:
     try:
         from ..Client import PhantomHourglassClient
+        from worlds._bizhawk.context import BizHawkClientContext
     except ImportError:
         pass
 
@@ -65,7 +66,8 @@ async def get_address_from_heap(ctx, pointer, offset=0, size=4) -> "Address":
 def storage_key(ctx, key: str):
     return f"{key}_{ctx.slot}_{ctx.team}"
 
-def get_stored_data(ctx, key, default=None):
+def get_stored_data(ctx: "BizHawkClientContext", key, default=None):
+    ctx.set_notify(storage_key(ctx, key))
     store = ctx.stored_data.get(storage_key(ctx, key), default)
     store = store if store is not None else default
     return store
