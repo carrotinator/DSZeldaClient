@@ -268,7 +268,7 @@ class DSTransition:
     """
     entrance_groups: IntEnum | None = None  # set these in game instance or
     opposite_entrance_groups: dict[IntEnum, IntEnum] | None = None
-    y_margin: int = 1000
+    y_margin: int = 2000
 
     def __init__(self, name, data):
         self.data = data
@@ -335,9 +335,11 @@ class DSTransition:
             y = self.coords[1] if self.coords else self.extra_data.get("y", coords["y"]) - y_offest
             printl(f"Checking entrance {self.name}")
             printl(f"\tx: {x_max} > {coords['x']} > {x_min}")
-            printl(f"\ty: {y + self.y_margin} > {y} > {coords['y'] - y_offest}")
+            printl(f"\ty: {y + self.y_margin} > {coords['y'] - y_offest} > {y}")
             printl(f"\tz: {z_max} > {coords['z']} > {z_min}")
-            if y + 2000 > coords["y"] - y_offest >= y and x_max > coords["x"] > x_min and z_max > coords["z"] > z_min:
+            if (y + self.y_margin > coords["y"] - y_offest >= y
+                    and x_max > coords["x"] > x_min
+                    and z_max > coords["z"] > z_min):
                 printl(f"\tMatch!")
                 return True
         return False
