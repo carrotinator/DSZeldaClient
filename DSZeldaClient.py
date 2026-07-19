@@ -1868,7 +1868,8 @@ class DSZeldaClient(BizHawkClient):
                                 check_offset, comp_value: int | list,
                                 size=4,
                                 table_addr: Address = None,
-                                return_index=False, max_search: int = 35) -> Address | tuple[Address, int] | None:
+                                return_index=False, max_search: int = 35,
+                                reverse=True) -> Address | tuple[Address, int] | None:
         """
         Find a specific object from a pointer table.
         Loops backwards from start_offset until the validation check matches.
@@ -1880,6 +1881,7 @@ class DSZeldaClient(BizHawkClient):
         :param size: size of the comp value read
         :param return_index: return the table index that the correct object was found at along with the object data address
         :param max_search: How far to search. -1 checks the entire table
+        :param reverse: Start backwards for effieciency
         :return: Address of valid object, or tuple of Address and table index
         """
 
@@ -1887,7 +1889,10 @@ class DSZeldaClient(BizHawkClient):
         f"{check_offset}, {comp_value}, {hex_f(table_addr)}")
 
         async def check_multi(l) -> tuple[Address | None, int]:
-            read_list = [Address.from_pointer(table_addr + 4 * (offset - _i), size=3) for _i in range(l)]
+            if reverse:
+                read_list = [Address.from_pointer(table_addr + 4 * (offset - _i), size=3) for _i in range(l)]
+            else:
+                read_list = [Address.from_pointer(table_addr + 4 * (offset + _i), size=3) for _i in range(l)]
             objects = (await read_multiple(ctx, read_list)).values()
             objects = [a for a in objects if 0x400000 > a > 0]
             print(f"search objects: {hex_f(objects)}")
@@ -1897,18 +1902,21 @@ class DSZeldaClient(BizHawkClient):
             printl(f"\tchecks: {checks}")
             for _i, check in enumerate(zip(objects, checks.values())):
                 o, c = check
-                printl(f"\t\tcomparing: {c} == {comp_value}")
+                printl(f"\t\tcomparing: {c} == {comp_value} ({hex_f(objects[_i])})")
                 if (isinstance(comp_value, list) and c in comp_value) or c == comp_value:
-                    return Address.from_pointer(o, size=3), _i
-            return None, _i
+                    return Address.from_pointer(o, size=3), _i if reverse else -_i
+            return None, _i if reverse else -_i
 
         check_list = list(range(start_offset + 1))
-        check_list.reverse()
+        if reverse:
+            check_list.reverse()
         batch_size = 8
         for chunk, offset in enumerate(check_list[:max_search:batch_size]):
             remaining = min(len(check_list[chunk * batch_size:]), batch_size)
             ret, chunk_index = await check_multi(remaining)
             if ret:
+                print(f"\tFound {offset} - {chunk_index} {ret}")
+
                 return (ret, offset - chunk_index) if return_index else ret
         printl(f"Could not find matching map object, probably restarted client in already loaded room.")
         return (None, 0) if return_index else None
