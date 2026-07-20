@@ -54,8 +54,16 @@ async def receive_refill(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
     res = []
     prog_received = min(client.item_count(ctx, item.refill, num_received_items),
                         len(item.give_ammo)) - 1
+    ammo_item = client.item_data[item.refill]
+    if hasattr(ammo_item, "variant"):
+        if client.item_count(ctx, ammo_item.variant[0]):
+            prog_received = min(
+                max(1 + client.item_count(ctx, ammo_item.variant[1]), prog_received),
+            len(item.give_ammo)) - 1
+
     if prog_received >= 0:
         res += item.address.get_write_list(item.give_ammo[prog_received])
+
     return res
 
 # Handle progressive and incremental items.
