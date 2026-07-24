@@ -175,6 +175,9 @@ async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientCont
         value = 9999 - prev_value if prev_value + value > 9999 else value
         value = prev_value if prev_value-value < 0 else value
     if "incremental" or "monotone_incremental" in item.tags:
+        if hasattr(item, "max") and prev_value >= item.max:
+            return []
+
         value = max(prev_value - value, 0)
     else:
         value = prev_value & (~value)
