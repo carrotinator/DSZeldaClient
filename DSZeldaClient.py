@@ -1102,6 +1102,7 @@ class DSZeldaClient(BizHawkClient):
                     local_checked_locations.add(loc_bytes)
                     await self._set_vanilla_item(ctx, location)
                     printl(f"Got location {loc_name}! with vanilla {self.last_vanilla_item} id {loc_bytes}")
+
                     if "persistent" not in location:
                         self.locations_in_scene.pop(loc_name)  # Remove location for overlapping purposes
                     break
@@ -1169,6 +1170,8 @@ class DSZeldaClient(BizHawkClient):
     async def _set_vanilla_item(self, ctx, location, vanilla_item: str | None = None):
         item: str | list[str] = vanilla_item or location.get("vanilla_item", None)
         if item is None:
+            return
+        if location.get("farmable", False) and location["id"] in ctx.checked_locations:
             return
         if isinstance(item, str):
             item_data = self.item_data[item]
