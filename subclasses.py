@@ -225,24 +225,28 @@ class Address:
         """When addresses are grabbed from pointers, the address is the same in all versions"""
         return cls(addr, addr, size, domain, name)
 
-class Pointer(Address):
+class AddressLoader(Address):
     """
-    Pointer from Data TCM
-    work towards depreciating, it should have been a classmethod from the start
+    Address who's first argument is a dtcm address, that needs to be loaded before it can be used as an address
     """
+    dtcm_addr: "Address"
 
-    def __init__(self, addr, name=""):
-        super().__init__(addr, addr, 4, "Data TCM", name)
+    def __init__(self, dtcm_addr, size, offset, domain="Main RAM", name=""):
+        self.dtcm_addr = dtcm_addr
+        self.offset = offset
+        super().__init__(None, None, size, domain, name)
+
+    async def load(self, ctx):
+        self.addr = await self.dtcm_addr.read(ctx)
 
 
-class AddrFromPointer(Address):
-    """
-    When addresses are grabbed from pointers, version doesn't matter.
-    work towards depreciating, it should have been a classmethod from the start
-    """
+async def load_multi(ctx, loader_list: list["AddressLoader"]):
+    """Load multiple address loaders"""
+    read_list: list = [addr.dtcm_addr for addr in loader_list]
+    read_res = await read_multiple(ctx, read_list)
+    for loader in read_list:
+        loader.addr = read_res[loader.dtcm_addr] + loader.offset
 
-    def __init__(self, addr, size=1, domain="Main RAM", name=""):
-        super().__init__(addr, addr, size, domain, name)
 
 class SRAM(Address):
     """
@@ -427,3 +431,4 @@ class DSTransition:
             counter.setdefault(point, 0)
             counter[point] += 1
         return res
+
