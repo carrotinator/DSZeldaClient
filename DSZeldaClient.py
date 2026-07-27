@@ -1030,11 +1030,12 @@ class DSZeldaClient(BizHawkClient):
         if not await check_bits(data):
             printl(f"\t{data['name']} is missing bits")
             return False
-        if not await self.has_special_dynamic_requirements(ctx, data):
-            return False
         if not has_entrance(data):
             printl(f"\t{data['name']} has the wrong entrance")
             return False
+        if not await self.has_special_dynamic_requirements(ctx, data):
+            return False
+
 
         return True
 
