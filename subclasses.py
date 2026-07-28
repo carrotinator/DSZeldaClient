@@ -102,6 +102,11 @@ class Address:
         self.size = size
         self.name = name
 
+    def set_addr(self, value):
+        self.addr = value
+        self.addr_eu = value
+        self.addr_lookup[0] = value
+
     def validate(self):
         if domain == "Main RAM":
             assert 0 < self.addr_eu < 0x400000
