@@ -1883,7 +1883,7 @@ class DSZeldaClient(BizHawkClient):
         Find a specific object from a pointer table.
         Loops backwards from start_offset until the validation check matches.
         :param ctx: BizhawkContext
-        :param start_offset: largest offset in the table the object you want can be found in
+        :param start_offset: offset in table to start searching from
         :param check_offset: offset in the object data to use for validation
         :param comp_value: what check offset needs to equal to validate the object
         :param table_addr: Address for the start of the table to search through
@@ -1908,7 +1908,7 @@ class DSZeldaClient(BizHawkClient):
             checks = await read_multiple(ctx, [Address.from_pointer(a + int(check_offset * 4), size=size) for a in objects])
             _i = 0
             printl(f"\tobjects: {[hex(o) for o in objects]}")
-            printl(f"\tchecks: {checks}")
+            printl(f"\tchecks: {hex_f(checks)}")
             for _i, check in enumerate(zip(objects, checks.values())):
                 o, c = check
                 printl(f"\t\tcomparing: {c} == {comp_value} ({hex_f(objects[_i])})")
