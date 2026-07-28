@@ -1547,7 +1547,7 @@ class DSZeldaClient(BizHawkClient):
 
     async def set_stage_flags(self, ctx, stage):
         """
-        called on entering a new stage. sets stage flags. ST doesn't do this yet
+        called on entering a new stage. sets stage flags.
         :param ctx:
         :param stage:
         :return:
