@@ -107,6 +107,12 @@ class Address:
         self.addr_eu = value
         self.addr_lookup[0] = value
 
+    def get_address(self, region=None):
+        if region is not None:
+            region = self._region_int(region)
+            return self.addr_lookup[region]
+        return self.addr
+
     def validate(self):
         if domain == "Main RAM":
             assert 0 < self.addr_eu < 0x400000
@@ -122,12 +128,6 @@ class Address:
             region = ["eu", "us"].index(region.lower())
         assert region in [0, 1]
         return region
-
-    def get_address(self, region=None):
-        if region is not None:
-            region = self._region_int(region)
-            return self.addr_lookup[region]
-        return self.addr
 
     def get_read_list(self):
         return [self.get_inner_read_list()]
@@ -245,7 +245,7 @@ class AddressLoader(Address):
         super().__init__(None, None, size, domain, name)
 
     async def load(self, ctx):
-        self.addr = await self.dtcm_addr.read(ctx) + self.load_offset
+        self.set_addr(await self.dtcm_addr.read(ctx) + self.load_offset)
 
     async def read_bytes(self, ctx):
         if not self.addr:
@@ -256,14 +256,14 @@ class DoubleAddressLoader(AddressLoader):
 
     async def load(self, ctx):
         pointer = Address.from_pointer(await self.dtcm_addr.read(ctx), size=3)
-        self.addr = await pointer.read(ctx) + self.load_offset
+        self.set_addr(await pointer.read(ctx) + self.load_offset)
 
 async def load_multi(ctx, loader_list: list["AddressLoader"]):
     """Load multiple address loaders"""
     read_list: list = [addr.dtcm_addr for addr in loader_list]
     read_res = await read_multiple(ctx, read_list)
     for loader in read_list:
-        loader.addr = read_res[loader.dtcm_addr] + loader.offset
+        loader.set_addr(read_res[loader.dtcm_addr] + loader.load_offset)
 
 
 class SRAM(Address):
