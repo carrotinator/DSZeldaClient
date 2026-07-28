@@ -232,14 +232,15 @@ class AddressLoader(Address):
     Address who's first argument is a dtcm address, that needs to be loaded before it can be used as an address
     """
     dtcm_addr: "Address"
+    load_offset: int
 
-    def __init__(self, dtcm_addr, size=1, offset=0, domain="Main RAM", name=""):
+    def __init__(self, dtcm_addr, size=1, load_offset=0, domain="Main RAM", name=""):
         self.dtcm_addr = dtcm_addr
-        self.offset = offset
+        self.load_offset = load_offset
         super().__init__(None, None, size, domain, name)
 
     async def load(self, ctx):
-        self.addr = await self.dtcm_addr.read(ctx)
+        self.addr = await self.dtcm_addr.read(ctx) + self.load_offset
 
     async def read_bytes(self, ctx):
         if not self.addr:
@@ -250,7 +251,7 @@ class DoubleAddressLoader(AddressLoader):
 
     async def load(self, ctx):
         pointer = Address.from_pointer(await self.dtcm_addr.read(ctx), size=3)
-        self.addr = await pointer.read(ctx)
+        self.addr = await pointer.read(ctx) + self.load_offset
 
 async def load_multi(ctx, loader_list: list["AddressLoader"]):
     """Load multiple address loaders"""
