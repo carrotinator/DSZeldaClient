@@ -1533,6 +1533,7 @@ class DSZeldaClient(BizHawkClient):
     async def _set_er_coords(self, ctx):
         if self.er_exit_coord_writes:
             await bizhawk.write(ctx.bizhawk_ctx, self.er_exit_coord_writes)
+            printl(f"Setting er coords {hex_f(self.er_exit_coord_writes)}")
             self.er_exit_coord_writes = None
 
     async def enter_special_key_room(self, ctx, stage, scene_id) -> bool:
