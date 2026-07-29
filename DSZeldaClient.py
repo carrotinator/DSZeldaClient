@@ -329,6 +329,7 @@ class DSZeldaClient(BizHawkClient):
             self.lss_retry_attempts = 4
             self.last_saved_scene = None
             self.clear_variables()
+            self.precision_mode = None
             ctx.watcher_timeout = 0.4
             return
 
