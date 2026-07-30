@@ -42,6 +42,7 @@ async def read_multiple(ctx, addresses, signed=False, keys=None, offset=0) -> di
 
 async def write_multiple(ctx, addresses: Iterable["Address"], values: Iterable[int]):
     writes = [a.get_inner_write_list(v) for a, v in zip(addresses, values)]
+    # print(f"Writing: {hex_f(writes)}")
     await bizhawk.write(ctx.bizhawk_ctx, writes)
 
 
@@ -138,7 +139,7 @@ class Address:
     def get_write_list(self, value:int or list):
         return [self.get_inner_write_list(value)]
 
-    def get_inner_write_list(self, value:int or list):
+    def get_inner_write_list(self, value: int or list):
         if isinstance(value, int):
             value = split_bits(value, self.size)
         return self.addr, value[:self.size], self.domain

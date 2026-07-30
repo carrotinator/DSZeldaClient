@@ -1623,12 +1623,19 @@ class DSZeldaClient(BizHawkClient):
         async def check_entrance(loc):
             if "from_entrances" in loc:
                 if self.current_entrance not in loc["from_entrances"]:
-                    self.locations_in_scene.pop(loc_name)
+                    printl(f"\tLocation {loc_name} has the wrong entrance {hex_f(self.current_entrance)} {loc['from_entrances']}.")
+                    try:
+                        self.locations_in_scene.pop(loc_name)
+                    except KeyError:
+                        pass
                     return False
-            if "from_coords" in loc:
+            if "from_coords" in loc and self.current_entrance >= 0xFA:
                 coord_data = loc.get("from_coords", {})
                 coords = await self.get_coords(ctx)
-                printl(f"\tLocation Coords: {coords} reqs {coord_data}")
+                printl(f"\tLocation Coords: {coords} reqs {coord_data} "
+                       f"{coord_data.get('x_max', 0xFFFFFFF) > coords['x'] > coord_data.get('x_min', -0xFFFFFFF)}"
+                       f"{coord_data.get('y', coords['y']) + 2000 > coords['y'] >= coord_data.get('y', coords['y'])}"
+                       f"{coord_data.get('z_max', 0xFFFFFFF) > coords['z'] > coord_data.get('z_min', -0xFFFFFFF)}")
                 return all([
                     coord_data.get("x_max", 0xFFFFFFF) > coords['x'] > coord_data.get("x_min", -0xFFFFFFF),
                     coord_data.get("y", coords['y']) + 2000 > coords['y'] >= coord_data.get("y", coords['y']),
@@ -1651,12 +1658,11 @@ class DSZeldaClient(BizHawkClient):
                 continue
 
             # Filter locations by slot data
-            if not check_slot_data(location):
+            if not check_slot_data(location) and "always_exist" not in location:
                 # printl(f"\tLocation {loc_name} has the wrong slotdata.")
                 print_again = True
                 continue
             if not await check_entrance(location):
-                printl(f"\tLocation {loc_name} has the wrong entrance.")
                 print_again = True
                 continue
 
