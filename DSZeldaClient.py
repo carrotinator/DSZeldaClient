@@ -155,7 +155,7 @@ class DSZeldaClient(BizHawkClient):
         self.cycle_counter: int = 0
         self.set_starting_flags = False
         self.delay_pickup_remove_vanilla = False
-        self._delay_room_action: int = 5
+        self._delay_room_action: int = 3
 
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
@@ -509,7 +509,7 @@ class DSZeldaClient(BizHawkClient):
 
                 # Hard coded room stuff
                 await self.process_hard_coded_rooms(ctx, current_scene)
-                self._delay_room_action = 5
+                self._delay_room_action = 3
 
                 self.last_stage = current_stage
                 self.last_scene = current_scene
@@ -1009,6 +1009,9 @@ class DSZeldaClient(BizHawkClient):
                             return False
                     elif "not" in arg_lookup.get(addr, ""):
                         if p & v_lookup[addr]:
+                            return False
+                    elif "exact" in arg_lookup.get(addr, ""):
+                        if p != v_lookup[addr]:
                             return False
             return True
 

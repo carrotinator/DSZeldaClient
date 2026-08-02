@@ -103,6 +103,9 @@ class Address:
         self.size = size
         self.name = name
 
+        if self.addr:
+            self.validate()
+
     def set_addr(self, value):
         self.addr = value
         self.addr_eu = value
@@ -115,7 +118,7 @@ class Address:
         return self.addr
 
     def validate(self):
-        if domain == "Main RAM":
+        if self.domain == "Main RAM":
             assert 0 < self.addr_eu < 0x400000
 
     def set_region(self, region: str or int):
