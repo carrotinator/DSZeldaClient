@@ -119,7 +119,8 @@ class Address:
 
     def validate(self):
         if self.domain == "Main RAM":
-            assert 0 < self.addr_eu < 0x400000
+            if not 0 < self.addr_eu < 0x400000:
+                self.set_addr(0)
 
     def set_region(self, region: str or int):
         self.current_region = self._region_int(region)

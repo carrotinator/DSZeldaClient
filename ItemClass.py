@@ -144,18 +144,19 @@ async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClien
 
     if hasattr(item, "variant") and client.item_count(ctx, item.variant[0]):
         index = 1 + client.item_count(ctx, item.variant[1])
+        print(f"\tProg count: {index}")
     else:
         index = client.item_count(ctx, item.name)
 
-    if index >= len(item.progressive):
-        return res
-    address, value = item.progressive[index]
+    index = min(index, len(item.progressive))
+    address, value = item.progressive[index-1]
     if hasattr(item, "give_ammo"):
         if index == 0:
             res += item.ammo_address.get_write_list(0)
         else:
             ammo_v = item.give_ammo[min(max(index - 1, 0), len(item.give_ammo) - 1)]
             res += item.ammo_address.get_write_list(ammo_v)
+
     # Progressive overwrite fix
     if "progressive_overwrite" in item.tags and index > 1:
         _, value = item.progressive[index-1]
