@@ -145,7 +145,8 @@ class DSZeldaClient(BizHawkClient):
         self.tried_short_cs = False
 
         self.precision_mode = None  # [address_to_precision_read, compare_value, *precision_operation_data]
-        self.precision_operation = None
+        self.precision_operation: list | str = []
+        self.precision_counter: int = 0
         self.heal_on_load = False
         self.precision_delay_flags = False
 
@@ -338,6 +339,13 @@ class DSZeldaClient(BizHawkClient):
             await bizhawk.lock(ctx.bizhawk_ctx)
             precision_read = await self.precision_mode[0].read(ctx, silent=True)
             printl(f"Precision read {precision_read} == {self.precision_mode[1]} mode {self.precision_mode}")
+            self.precision_counter += 1
+            if self.precision_counter > 600:
+                self.precision_counter = 0
+                printl(f"Precision mode {hex_f(self.precision_mode)} timed out")
+                self.precision_mode = None
+                await bizhawk.unlock(ctx.bizhawk_ctx)
+                return
             if precision_read == self.precision_mode[1]:
                 printl(f"Precision read, not yet")
                 ctx.watcher_timeout = 0.01
@@ -527,7 +535,7 @@ class DSZeldaClient(BizHawkClient):
 
             if self.precision_operation:
                 await bizhawk.unlock(ctx.bizhawk_ctx)
-                self.precision_operation = None
+                self.precision_operation = []
 
         except bizhawk.RequestFailedError:
             # Exit handler and return to main loop to reconnect
@@ -1181,7 +1189,7 @@ class DSZeldaClient(BizHawkClient):
         item: str | list[str] = vanilla_item or location.get("vanilla_item", None)
         if item is None:
             return
-        if location.get("farmable", False) and location["id"] in ctx.checked_locations:
+        if location.get("farmable", "") not in ["", "conditional"] and location["id"] in ctx.checked_locations:
             return
         if isinstance(item, str):
             item_data = self.item_data[item]
@@ -1597,6 +1605,10 @@ class DSZeldaClient(BizHawkClient):
         locations_found = ctx.checked_locations
         print_again = False
 
+        if self.locations_in_scene is None:
+            printl(f"\tNo locations in scene")
+            return
+
         def check_slot_data(loc):
             if "slot_data" in loc:
                 for slot, value, *args in location["slot_data"]:
@@ -1646,16 +1658,15 @@ class DSZeldaClient(BizHawkClient):
                 ])
             return True
 
-        if self.locations_in_scene is None:
-            printl(f"\tNo locations in scene")
-            return
-
         # Create memory watches for checks triggerd by flags, and make list for checking sram
         for loc_name, location in self.location_area_to_watches.get(scene, {}).items():
             loc_id = location['id']
 
             # Remove unincluded locations
-            if "slot_data" not in location and loc_id not in ctx.server_locations and "always_exist" not in location:
+            if (("slot_data" not in location  # slot data removal handled separately
+                    and loc_id not in ctx.server_locations
+                    and "always_exist" not in location)
+                    or location.get("farmable", "") == "remove"):
                 self.locations_in_scene.pop(loc_name)
                 print_again = True
                 continue
