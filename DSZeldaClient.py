@@ -352,6 +352,7 @@ class DSZeldaClient(BizHawkClient):
                 await self.frame_advance(ctx)
                 return
             printl(f"Trigger activated!")
+            self.precision_counter = 0
             if await self.precision_backup(ctx, precision_read):
                 await bizhawk.unlock(ctx.bizhawk_ctx)
             else:
@@ -713,7 +714,11 @@ class DSZeldaClient(BizHawkClient):
                         e_write_list, res = post_process(exit_data)
                         defer_entrance = "traverse"
                         if detect_data in self.er_messages:
-                            logger.info(self.er_messages[detect_data])
+                            if self.er_messages[detect_data].startswith('$'):
+                                self.custom_er_message(ctx, self.er_messages[detect_data])
+                            else:
+                                logger.info(self.er_messages[detect_data])
+
                     else:
                         e_write_list, res = post_process(detect_data)
                         if ctx.slot_data.get("ut_blocked_entrances_behaviour", 0) in [0, 2]:
@@ -735,6 +740,11 @@ class DSZeldaClient(BizHawkClient):
             await self.store_visited_entrances(ctx, detect_data, exit_data, defer_entrance)
 
         return res
+
+    def custom_er_message(self, ctx, message: str):
+        """
+        If an er message starts wth '$', run this method instead of printing said message
+        """
 
     def write_respawn_entrance(self, exit_data):
         """
