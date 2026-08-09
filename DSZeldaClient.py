@@ -1775,11 +1775,13 @@ class DSZeldaClient(BizHawkClient):
             for args in d.get("slot_data", []):
                 if type(args) is str:
                     option, _value = args, [True]
+                    args2 = []
                 else:
                     option, _value, *args2 = args
 
                 slot = ctx.slot_data.get(option, None)
-                if type(slot) is list:
+                # print(f"Comparing hint {slot} {option} {_value}")
+                if isinstance(slot, Iterable):
                     # printl(f"Testing args2 {option} {slot} {_value} {args2}")
                     if args2 and args2[0] == "not":
                         if _value in slot:
@@ -1788,8 +1790,8 @@ class DSZeldaClient(BizHawkClient):
                     elif _value not in slot:
                         return False
                 else:
-                    _value = [_value] if type(_value) is int else _value  # Support lists of values
-                    if ctx.slot_data.get(option, "unknown_slot_data") not in _value:
+                    _value = [_value] if isinstance(_value, int) else _value  # Support lists of values
+                    if slot not in _value:
                         return False
             return True
 
