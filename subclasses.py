@@ -59,10 +59,10 @@ async def get_address_from_heap(ctx, pointer, offset=0, size=4) -> "Address":
     m_course = 0
     while m_course == 0:
         m_course = await pointer.read(ctx)
-    m_course = Address.from_pointer(m_course - 0x02000000, size=4)
+    m_course = Address.from_pointer(m_course, size=4)
     read = await m_course.read(ctx)
-    print(f"Got map address @ {hex(read + offset - 0x02000000)}")
-    return Address.from_pointer(read + offset - 0x02000000, size=size)
+    print(f"Got map address @ {hex(read + offset)}")
+    return Address.from_pointer(read + offset, size=size)
 
 def storage_key(ctx, key: str):
     return f"{key}_{ctx.slot}_{ctx.team}"
@@ -236,6 +236,10 @@ class Address:
     def from_pointer(cls, addr, size=1, domain="Main RAM", name=""):
         """When addresses are grabbed from pointers, the address is the same in all versions"""
         return cls(addr, addr, size, domain, name)
+
+class DTCM(Address):
+    def __init__(self, addr):
+        super().__init__(addr, addr, 3, "Data TCM")
 
 class AddressLoader(Address):
     """

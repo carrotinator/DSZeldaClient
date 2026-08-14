@@ -1,6 +1,7 @@
 
 import time
 import logging
+import itertools
 from typing import TYPE_CHECKING, Set, Dict, Any, Iterable
 
 from NetUtils import ClientStatus
@@ -9,6 +10,7 @@ from worlds._bizhawk.client import BizHawkClient
 from ..data.Constants import *
 from ..Util import *
 from .subclasses import read_multiple, write_multiple, storage_key, get_stored_data, hex_f, printl, print_debug
+from ..data.Items import ITEM_GROUPS
 
 from ..data.Addresses import *
 
@@ -79,7 +81,7 @@ class DSZeldaClient(BizHawkClient):
         self.scene_to_dynamic_flag: dict[int, list[dict]] = {}
         self.hint_scene_to_watches = build_hint_scene_to_watches()
         self.entrance_id_to_entrance = build_entrance_id_to_data()
-        self.dynamic_entrances_by_scene = None
+        self.dynamic_entrances_by_scene: dict[int, dict] = {}
 
         self.entrances = {}
         self.hint_data = {}
