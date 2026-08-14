@@ -59,7 +59,7 @@ async def get_address_from_heap(ctx, pointer, offset=0, size=4) -> "Address":
     m_course = 0
     while m_course == 0:
         m_course = await pointer.read(ctx)
-    m_course = Address.from_pointer(m_course, size=4)
+    m_course = Address.from_pointer(m_course, size=3)
     read = await m_course.read(ctx)
     print(f"Got map address @ {hex(read + offset)}")
     return Address.from_pointer(read + offset, size=size)
