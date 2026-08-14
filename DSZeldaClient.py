@@ -104,7 +104,7 @@ class DSZeldaClient(BizHawkClient):
         self.watches: dict[str, Address] = {}
         self.receiving_location = False
         self.last_vanilla_item: list[str | list[tuple[str, int]]] = []
-        self.delay_reset = False
+        self.delay_reset = 0
         self.getting_location = False
 
         self._previous_game_state = False  # Updated every successful cycle
@@ -1943,11 +1943,11 @@ class DSZeldaClient(BizHawkClient):
 
     @staticmethod
     async def find_table_object(ctx: "BizHawkClientContext", start_offset: int,
-                                check_offset, comp_value: int | list,
-                                size=4,
+                                check_offset: int, comp_value: int | list,
+                                size:int=4,
                                 table_addr: Address = None,
-                                return_index=False, max_search: int = 35,
-                                reverse=True) -> Address | tuple[Address, int] | None:
+                                return_index: bool=False, max_search: int = 35,
+                                reverse: bool=True) -> Address | tuple[Address, int] | None:
         """
         Find a specific object from a pointer table.
         Loops backwards from start_offset until the validation check matches.
@@ -1959,7 +1959,7 @@ class DSZeldaClient(BizHawkClient):
         :param size: size of the comp value read
         :param return_index: return the table index that the correct object was found at along with the object data address
         :param max_search: How far to search. -1 checks the entire table
-        :param reverse: Start backwards for effieciency
+        :param reverse: Start backwards for efficiency
         :return: Address of valid object, or tuple of Address and table index
         """
 
