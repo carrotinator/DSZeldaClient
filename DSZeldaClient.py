@@ -158,6 +158,9 @@ class DSZeldaClient(BizHawkClient):
         self.delay_pickup_remove_vanilla = False
         self._delay_room_action: int = 3
 
+        self.reload_stage_flags: bool = False
+        self.stage_flags: dict[int, list[int]] = {}
+
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
 
@@ -495,6 +498,10 @@ class DSZeldaClient(BizHawkClient):
                 printl(f"Entered new scene {hex(current_scene)} with ER:")
                 for i, v in self.er_in_scene.items():
                     printl(f"\t{i} => {v} {i.exit}")
+
+                if self.reload_stage_flags:
+                    self.reload_stage_flags = False
+                    await self.set_stage_flags(ctx, self.current_stage)
 
                 await self.process_on_room_load(ctx, current_scene, read_result)
                 await self._load_local_locations(ctx, self.current_scene)
@@ -879,6 +886,11 @@ class DSZeldaClient(BizHawkClient):
             if not await self._has_dynamic_requirements(ctx, data):
                 continue
 
+            # Update stage flags
+            if "update_stage_flags" in data and "on_scenes" in data:
+                printl(f"\t{data['name']} is setting stage flags")
+                self.update_stage_flag((data["on_scenes"][0] & 0xFF00) >> 8, data["update_stage_flags"])
+
             # Overwrite er_in_scene with dynamic entrance
             detect_data = data["detect_data"]
             if data["exit_data"] is None:
@@ -891,6 +903,11 @@ class DSZeldaClient(BizHawkClient):
                 if "message" in data:
                     self.er_messages[detect_data] = data.get("message", None)
             printl(f"\t{detect_data} => {data['exit_data']}")
+
+    def update_stage_flag(self, stage: int, new: list[int]):
+        self.stage_flags[stage] = [o | n for o, n in itertools.zip_longest(STAGE_FLAGS.get(stage, [0,0,0,0]), new, fillvalue=0)]
+        print(f"Updating Stage Flags: {hex_f(stage)} {hex_f(new)} : {hex_f(self.stage_flags[stage])}")
+        self.reload_stage_flags = True
 
     async def _has_dynamic_requirements(self, ctx, data) -> bool:
         def check_items(d):
@@ -1042,6 +1059,18 @@ class DSZeldaClient(BizHawkClient):
                     return False
             return True
 
+        def check_traversed_entrances():
+            entrances = data.get("has_traversed_entrances", [])
+            if not entrances:
+                return True
+            if not self.traversed_entrances:
+                return False
+
+            for e in entrances:
+                if ENTRANCES[e].id not in self.traversed_entrances:
+                    return False
+            return True
+
         if not check_items(data):
             printl(f"\t{data['name']} does not have item reqs")
             return False
@@ -1060,8 +1089,12 @@ class DSZeldaClient(BizHawkClient):
         if not has_entrance(data):
             printl(f"\t{data['name']} has the wrong entrance")
             return False
+        if not check_traversed_entrances():
+            printl(f"\t{data['name']} has not traversed entrances")
+            return False
         if not await self.has_special_dynamic_requirements(ctx, data):
             return False
+
 
 
         return True
