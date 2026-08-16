@@ -143,10 +143,11 @@ class Address:
     def get_write_list(self, value:int or list):
         return [self.get_inner_write_list(value)]
 
-    def get_inner_write_list(self, value: int or list):
+    def get_inner_write_list(self, value: int or list, offset: int=0, size: int=0):
         if isinstance(value, int):
             value = split_bits(value, self.size)
-        return self.addr, value[:self.size], self.domain
+        size = self.size if not size else size
+        return self.addr+offset, value[:size], self.domain
 
     async def read(self, ctx, signed=False, silent=False):
         read_result = await self.read_bytes(ctx)
