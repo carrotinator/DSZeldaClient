@@ -71,6 +71,7 @@ class DSZeldaClient(BizHawkClient):
 
     stage_flag_offset: int
     er_y_offest: int # In ph i use coords who's y is 164 off the entrance y
+    map_warp: "DSTransition" or None
 
     def __init__(self) -> None:
         super().__init__()
@@ -703,9 +704,7 @@ class DSZeldaClient(BizHawkClient):
 
         # Map warp
         elif getattr(self, "map_warp", None):
-            if res[0] == 0x25 and self.last_stage != 0x25:
-                logger.info(f"Canceling map warp, you can't warp while entering TotOK")
-            else:
+            if not self.cancel_map_warp(ctx, res):
                 logger.info(f"Map warping to {self.map_warp.name}")
                 e_write_list, res = post_process(self.map_warp)
             self.map_warp = None
@@ -749,6 +748,10 @@ class DSZeldaClient(BizHawkClient):
             await self.store_visited_entrances(ctx, detect_data, exit_data, defer_entrance)
 
         return res
+
+    def cancel_map_warp(self, ctx, going_to: tuple):
+        """Test if warping in an illegal way, to prevent it. Return True if canceling"""
+        return False
 
     def custom_er_message(self, ctx, message: str):
         """
@@ -827,6 +830,11 @@ class DSZeldaClient(BizHawkClient):
             if not await self._has_dynamic_requirements(ctx, data):
                 continue
 
+            # Update stage flags
+            if "update_stage_flags" in data and "on_scenes" in data:
+                printl(f"\t{data['name']} is setting stage flags")
+                self.update_stage_flag((data["on_scenes"][0] & 0xFF00) >> 8, data["update_stage_flags"])
+
             # Create read/write lists
             for a, v in data.get("set_if_true", []):
                 read_addr.add(a)
@@ -888,11 +896,6 @@ class DSZeldaClient(BizHawkClient):
             if not await self._has_dynamic_requirements(ctx, data):
                 continue
 
-            # Update stage flags
-            if "update_stage_flags" in data and "on_scenes" in data:
-                printl(f"\t{data['name']} is setting stage flags")
-                self.update_stage_flag((data["on_scenes"][0] & 0xFF00) >> 8, data["update_stage_flags"])
-
             # Overwrite er_in_scene with dynamic entrance
             detect_data = data["detect_data"]
             if data["exit_data"] is None:
@@ -907,7 +910,7 @@ class DSZeldaClient(BizHawkClient):
             printl(f"\t{detect_data} => {data['exit_data']}")
 
     def update_stage_flag(self, stage: int, new: list[int]):
-        self.stage_flags[stage] = [o | n for o, n in itertools.zip_longest(STAGE_FLAGS.get(stage, [0,0,0,0]), new, fillvalue=0)]
+        self.stage_flags[stage] = [o | n for o, n in itertools.zip_longest(self.stage_flags.get(stage, [0,0,0,0]), new, fillvalue=0)]
         print(f"Updating Stage Flags: {hex_f(stage)} {hex_f(new)} : {hex_f(self.stage_flags[stage])}")
         self.reload_stage_flags = True
 
