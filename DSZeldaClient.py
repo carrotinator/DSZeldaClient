@@ -1,6 +1,7 @@
 
 import time
 import logging
+import itertools
 from typing import TYPE_CHECKING, Set, Dict, Any, Iterable
 
 from NetUtils import ClientStatus
@@ -8,17 +9,34 @@ import worlds._bizhawk as bizhawk
 from worlds._bizhawk.client import BizHawkClient
 from ..data.Constants import *
 from ..Util import *
-from .subclasses import read_multiple, write_multiple, storage_key, get_stored_data
+from .subclasses import read_multiple, write_multiple, storage_key, get_stored_data, hex_f, printl, print_debug
+from ..data.Items import ITEM_GROUPS
 
 from ..data.Addresses import *
 
 if TYPE_CHECKING:
-    from worlds._bizhawk.context import BizHawkClientContext
+    from worlds._bizhawk.context import BizHawkClientContext, BizHawkClientCommandProcessor
     from ..Subclasses import DSTransition
     from .ItemClass import DSItem
     from .subclasses import Address
 
 logger = logging.getLogger("Client")
+
+def get_version() -> str:
+    import json
+    import pkgutil
+    print(f"Name: {__name__}")
+    root = __name__.split(".DSZeldaClient")[0]
+    return json.loads(pkgutil.get_data(root, "archipelago.json").decode())["world_version"]
+
+def cmd_carrot_asked(self: "BizHawkClientCommandProcessor"):
+    """Prints debug info from the current scene. Same info as in the debug client."""
+    from Utils import __version__
+    for s in print_debug:
+        logger.info(s)
+    logger.info(f"Current APWorld Version: {get_version()}")
+    logger.info(f"Current Archipelago Version: {__version__}")
+    return True
 
 class DSZeldaClient(BizHawkClient):
     local_checked_locations: Set[int]
@@ -53,6 +71,7 @@ class DSZeldaClient(BizHawkClient):
 
     stage_flag_offset: int
     er_y_offest: int # In ph i use coords who's y is 164 off the entrance y
+    map_warp: "DSTransition" or None
 
     def __init__(self) -> None:
         super().__init__()
@@ -63,7 +82,7 @@ class DSZeldaClient(BizHawkClient):
         self.scene_to_dynamic_flag: dict[int, list[dict]] = {}
         self.hint_scene_to_watches = build_hint_scene_to_watches()
         self.entrance_id_to_entrance = build_entrance_id_to_data()
-        self.dynamic_entrances_by_scene = None
+        self.dynamic_entrances_by_scene: dict[int, dict] = {}
 
         self.entrances = {}
         self.hint_data = {}
@@ -86,7 +105,7 @@ class DSZeldaClient(BizHawkClient):
         self.watches: dict[str, Address] = {}
         self.receiving_location = False
         self.last_vanilla_item: list[str | list[tuple[str, int]]] = []
-        self.delay_reset = False
+        self.delay_reset = 0
         self.getting_location = False
 
         self._previous_game_state = False  # Updated every successful cycle
@@ -128,8 +147,9 @@ class DSZeldaClient(BizHawkClient):
         self.last_dungeon_warp_target = None
         self.tried_short_cs = False
 
-        self.precision_mode = None
-        self.precision_operation = None
+        self.precision_mode = None  # [address_to_precision_read, compare_value, *precision_operation_data]
+        self.precision_operation: list | str = []
+        self.precision_counter: int = 0
         self.heal_on_load = False
         self.precision_delay_flags = False
 
@@ -139,9 +159,20 @@ class DSZeldaClient(BizHawkClient):
         self.cycle_counter: int = 0
         self.set_starting_flags = False
         self.delay_pickup_remove_vanilla = False
+        self._delay_room_action: int = 3
+
+        self.reload_stage_flags: bool = False
+        self.stage_flags: dict[int, list[int]] = {}
 
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
+
+    def has_from_group(self, ctx, group_name: str) -> bool:
+        printl(f"Checking for items in group {group_name} {ITEM_GROUPS[group_name]}")
+        for i in ITEM_GROUPS[group_name]:
+            if self.item_count(ctx, i):
+                return True
+        return False
 
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
         try:
@@ -159,7 +190,11 @@ class DSZeldaClient(BizHawkClient):
         ctx.items_handling = 0b111
         ctx.want_slot_data = True
         ctx.watcher_timeout = 0.4
-        print(f"validation: {ctx.game}, {ctx.items_handling}")
+        printl(f"validation: {ctx.game}, {ctx.items_handling}")
+
+        # Set commands
+        if "carrot_asked" not in ctx.command_processor.commands:
+            ctx.command_processor.commands["carrot_asked"] = cmd_carrot_asked
         return True
 
     async def check_game_version(self, ctx: "BizHawkClientContext") -> bool:
@@ -286,6 +321,11 @@ class DSZeldaClient(BizHawkClient):
         Called on connecting
         """
 
+    @staticmethod
+    def in_game_comparison(in_game):
+        """Return True if in game"""
+        return in_game
+
     async def game_watcher(self, ctx: "BizHawkClientContext") -> None:
         if not ctx.server or not ctx.server.socket.open or ctx.server.socket.closed or ctx.slot is None or ctx.slot == 0:
             self._just_entered_game = True
@@ -296,6 +336,7 @@ class DSZeldaClient(BizHawkClient):
             self.lss_retry_attempts = 4
             self.last_saved_scene = None
             self.clear_variables()
+            self.precision_mode = None
             ctx.watcher_timeout = 0.4
             return
 
@@ -303,19 +344,26 @@ class DSZeldaClient(BizHawkClient):
         if self.precision_mode:
             await bizhawk.lock(ctx.bizhawk_ctx)
             precision_read = await self.precision_mode[0].read(ctx, silent=True)
-            print(f"Precision read {precision_read} == {self.precision_mode[1]} mode {self.precision_mode}")
-            if precision_read == self.precision_mode[1]:
-                print(f"Precision read, not yet")
-                ctx.watcher_timeout = 0.01
+            printl(f"Precision read {precision_read} == {self.precision_mode[1]} mode {self.precision_mode}")
+            self.precision_counter += 1
+            if self.precision_counter > 600:
+                self.precision_counter = 0
+                printl(f"Precision mode {hex_f(self.precision_mode)} timed out")
+                self.precision_mode = None
                 await bizhawk.unlock(ctx.bizhawk_ctx)
-                await bizhawk.lock(ctx.bizhawk_ctx)
                 return
-            print(f"Trigger activated!")
+            if precision_read == self.precision_mode[1]:
+                printl(f"Precision read, not yet")
+                ctx.watcher_timeout = 0.01
+                await self.frame_advance(ctx)
+                return
+            printl(f"Trigger activated!")
+            self.precision_counter = 0
             if await self.precision_backup(ctx, precision_read):
                 await bizhawk.unlock(ctx.bizhawk_ctx)
             else:
                 self.precision_operation = self.precision_mode[2:] if len(self.precision_mode) > 2 else "wts"
-                print(f"precision operation: {self.precision_operation}")
+                printl(f"precision operation: {self.precision_operation}")
             self.precision_mode = None
 
         # Enable "DeathLink" tag if option was enabled
@@ -333,7 +381,7 @@ class DSZeldaClient(BizHawkClient):
             # Read main read list
             self.read_result = read_result = await read_multiple(ctx, self.main_read_list)
 
-            in_game = read_result[self.addr_game_state]
+            in_game = self.in_game_comparison(read_result[self.addr_game_state])
             self.current_stage = read_result[self.addr_stage]
 
             # Loading variables
@@ -347,7 +395,7 @@ class DSZeldaClient(BizHawkClient):
                 self.set_starting_flags = False
                 await self.process_in_menu(ctx, read_result)
                 ctx.watcher_timeout = 0.4
-                print("NOT IN GAME")
+                printl("NOT IN GAME")
                 # Finished game?
                 if not ctx.finished_game:
                     await self._process_game_completion(ctx)
@@ -357,7 +405,7 @@ class DSZeldaClient(BizHawkClient):
             # While game from main menu
             if in_game and not self._previous_game_state:
                 if not self.precision_operation and not await self.watched_intro_cs(ctx):
-                    print("In Intro CS")
+                    printl("In Intro CS")
                     return
                 self._just_entered_game = True
                 self.last_stage = None
@@ -371,7 +419,7 @@ class DSZeldaClient(BizHawkClient):
                 ctx.watcher_timeout = 0.1  # 9 frame interval to catch 11 frame ER windows (old)
                                            # 6 frame intervals to catch bounce timings
                 await self.enter_game(ctx)
-                print(f"Started Game")
+                printl(f"Started Game")
 
             self.is_dead = not read_result.get(self.health_address, 12)
 
@@ -388,7 +436,8 @@ class DSZeldaClient(BizHawkClient):
 
             # Process on new room. As soon as it's triggered, changing the scene variable changes entrance destination
             if ((self.current_scene != self.last_scene or self.current_entrance != current_entrance) and not self._entered_entrance and not self._loading_scene) or self.precision_operation:
-                print(f"")  # New Scene, line space
+                print_debug.clear()
+                printl(f"")  # New Scene, line space
                 # Trigger a different entrance to vanilla
                 current_stage, current_room, current_entrance = await self._entrance_warp(ctx, self.current_scene, current_entrance)
                 current_scene = current_stage * 0x100 + current_room
@@ -421,16 +470,20 @@ class DSZeldaClient(BizHawkClient):
                 await self.process_in_game(ctx, read_result)
                 self._just_entered_game = False
 
+            if self._loading_scene == 1 and loading:  # delay 1 cycle to avoid writing coords too early
+                printl(f"Loading Scene 2 {hex_f(self.current_scene)}, setting coords {hex_f(self.er_exit_coord_writes)}")
+                await self._set_er_coords(ctx)
+                self._loading_scene = 2
+
             # Started actual scene loading
             if self._entered_entrance and loading_scene:
-                self._loading_scene = True  # Second phase of loading room
+                self._loading_scene = 1  # Second phase of loading room
                 self._entered_entrance = False
-                print(f"Loading Scene {hex(self.current_scene) if self.current_scene else self.current_scene}, setting coords {self.er_exit_coord_writes}")
-                await self._set_er_coords(ctx)
+                printl(f"Loading Scene {hex_f(self.current_scene)}")
 
             # Fully loaded room
             if self._loading_scene and not loading:
-                print("Fully Loaded Room", self.current_scene)
+                printl("Fully Loaded Room", self.current_scene)
                 self._loading_scene = False
                 self._backup_coord_read = None
                 self.save_spam_protection = False
@@ -445,9 +498,13 @@ class DSZeldaClient(BizHawkClient):
                 # Load potential entrance warp destinations, and dynamic entrances
                 await self._set_dynamic_entrances(ctx, current_scene)
 
-                print(f"Entered new scene {hex(current_scene)} with ER:")
+                printl(f"Entered new scene {hex(current_scene)} with ER:")
                 for i, v in self.er_in_scene.items():
-                    print(f"\t{i} => {v} {i.exit}")
+                    printl(f"\t{i} => {v} {i.exit}")
+
+                if self.reload_stage_flags:
+                    self.reload_stage_flags = False
+                    await self.set_stage_flags(ctx, self.current_stage)
 
                 await self.process_on_room_load(ctx, current_scene, read_result)
                 await self._load_local_locations(ctx, self.current_scene)
@@ -462,7 +519,7 @@ class DSZeldaClient(BizHawkClient):
 
                 # Run entering stage code
                 if self.last_stage != current_stage:
-                    print("Fully Loaded Stage")
+                    printl("Fully Loaded Stage")
                     await self._enter_stage(ctx, current_stage, current_scene)
                     await self.update_main_read_list(ctx, current_stage)
                     if self.heal_on_load:
@@ -471,10 +528,11 @@ class DSZeldaClient(BizHawkClient):
 
                 # Hard coded room stuff
                 await self.process_hard_coded_rooms(ctx, current_scene)
+                self._delay_room_action = 3
 
                 self.last_stage = current_stage
                 self.last_scene = current_scene
-                print(f"Updated last scene!")
+                printl(f"Updated last scene!")
 
             self._previous_game_state = in_game
 
@@ -484,15 +542,15 @@ class DSZeldaClient(BizHawkClient):
                     if not loading_scene:
                         self._loading_scene = True  # Second phase of loading room
                         self._entered_entrance = False
-                        print("Missed loading read, using backup")
+                        printl("Missed loading read, using backup")
 
             if self.precision_operation:
                 await bizhawk.unlock(ctx.bizhawk_ctx)
-                self.precision_operation = None
+                self.precision_operation = []
 
         except bizhawk.RequestFailedError:
             # Exit handler and return to main loop to reconnect
-            print("Couldn't read data")
+            printl("Couldn't read data")
 
     async def detected_new_scene(self, ctx: "BizHawkClientContext"):
         """
@@ -529,15 +587,15 @@ class DSZeldaClient(BizHawkClient):
                     # Create map from scene to entrance dataclass
                     res.setdefault(data.scene, {})
                     res[data.scene][data] = exit_data
-                    # print(f"Creating scene data {hex(data.scene)}: {data} => {exit_data}")
+                    # printl(f"Creating scene data {hex(data.scene)}: {data} => {exit_data}")
                     res = self.add_special_er_data(ctx, res, data.scene, data, exit_data)
 
             self.er_map = res
-            # print(f"ER Map:")
-            # for scene, data in self.er_map.items():
-            #     print(f"\t{hex(scene)}")
-            #     for d2, d3 in data.items():
-            #         print(f"\t\t{d2} => {d3}")
+            printl(f"ER Map:")
+            for scene, data in self.er_map.items():
+                printl(f"\t{hex(scene)}")
+                for d2, d3 in data.items():
+                    printl(f"\t\t{d2} => {d3}")
 
 
 
@@ -564,10 +622,10 @@ class DSZeldaClient(BizHawkClient):
 
     async def _set_starting_flags(self, ctx: "BizHawkClientContext") -> None:
         write_list = self.addr_slot_id.get_write_list(ctx.slot)
-        print(f"New game, setting starting flags for slot {ctx.slot}")
+        printl(f"New game, setting starting flags for slot {ctx.slot}")
         for adr, _value in STARTING_FLAGS:
             write_list += adr.get_write_list(_value)
-        print(f"normal flags wl: {write_list}")
+        printl(f"normal flags wl: {hex_f(write_list)}")
         write_list += await self.set_special_starting_flags(ctx)
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
 
@@ -623,7 +681,7 @@ class DSZeldaClient(BizHawkClient):
         # Precision Warp
         if self.precision_operation:
             if self.precision_operation == "wts" or "wts" in self.precision_operation:
-                print(f"Precision Warp to start")
+                printl(f"Precision Warp to start")
                 self.warp_to_start_flag = True
                 self.precision_delay_flags = True
             elif isinstance(self.precision_operation, list):
@@ -646,9 +704,7 @@ class DSZeldaClient(BizHawkClient):
 
         # Map warp
         elif getattr(self, "map_warp", None):
-            if res[0] == 0x25 and self.last_stage != 0x25:
-                logger.info(f"Canceling map warp, you can't warp while entering TotOK")
-            else:
+            if not self.cancel_map_warp(ctx, res):
                 logger.info(f"Map warping to {self.map_warp.name}")
                 e_write_list, res = post_process(self.map_warp)
             self.map_warp = None
@@ -659,14 +715,18 @@ class DSZeldaClient(BizHawkClient):
             # Determine Entrance Warp
             coords = await self.get_coords(ctx)
             for detect_data, exit_data in self.er_in_scene.items():
-                # print(f"trying to detect ER {res} {detect_data.entrance} {detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest)}")
+                # printl(f"trying to detect ER {res} {detect_data.entrance} {detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest)}")
                 if detect_data.detect_exit(going_to, entrance, coords, self.er_y_offest):
-                    if await self.conditional_er(ctx, exit_data):
-                        print(f"Detected entrance: {detect_data} => {exit_data}")
+                    if await self.conditional_er(ctx, exit_data, detect_data=detect_data):
+                        printl(f"Detected entrance: {detect_data} => {exit_data}")
                         e_write_list, res = post_process(exit_data)
                         defer_entrance = "traverse"
                         if detect_data in self.er_messages:
-                            logger.info(self.er_messages[detect_data])
+                            if self.er_messages[detect_data].startswith('$'):
+                                self.custom_er_message(ctx, self.er_messages[detect_data])
+                            else:
+                                logger.info(self.er_messages[detect_data])
+
                     else:
                         e_write_list, res = post_process(detect_data)
                         if ctx.slot_data.get("ut_blocked_entrances_behaviour", 0) in [0, 2]:
@@ -676,18 +736,27 @@ class DSZeldaClient(BizHawkClient):
         # Unrandomized entrances can still have bounce conditions
         if not e_write_list:
             bounce_entrance = await self.conditional_bounce(ctx, going_to, entrance)
-            print(f"Trying bounce: {bounce_entrance}")
+            printl(f"Trying bounce: {bounce_entrance}")
             if bounce_entrance:
                 e_write_list, res = post_process(bounce_entrance)
 
 
         if e_write_list:
-            print(f"Writing entrance warp {e_write_list}")
+            printl(f"Writing entrance warp {hex_f(e_write_list)}")
             await bizhawk.write(ctx.bizhawk_ctx, e_write_list)
         if defer_entrance:
             await self.store_visited_entrances(ctx, detect_data, exit_data, defer_entrance)
 
         return res
+
+    def cancel_map_warp(self, ctx, going_to: tuple):
+        """Test if warping in an illegal way, to prevent it. Return True if canceling"""
+        return False
+
+    def custom_er_message(self, ctx, message: str):
+        """
+        If an er message starts wth '$', run this method instead of printing said message
+        """
 
     def write_respawn_entrance(self, exit_data):
         """
@@ -722,18 +791,20 @@ class DSZeldaClient(BizHawkClient):
         :return:
         """
 
-    async def conditional_er(self, ctx, exit_data, silent=False) -> bool:
+    async def conditional_er(self, ctx, exit_data, silent=False, detect_data=None) -> bool:
         """
         for handling custom conditional ER statements.
         If return false, ER will pop you back out the entrance you came from
         :param ctx:
         :param exit_data:
+        :param silent:
+        :param detect_data:
         :return:
         """
         return True
 
     async def _reset_dynamic_flags(self, ctx):
-        print(f"resetting flags {self._dynamic_flags_to_reset}")
+        printl(f"resetting flags {self._dynamic_flags_to_reset}")
         reset_data = [DYNAMIC_FLAGS[n] for n in self._dynamic_flags_to_reset]
         res = await self._process_dynamic_flags(ctx, reset_data)
         self._dynamic_flags_to_reset.clear()
@@ -745,7 +816,7 @@ class DSZeldaClient(BizHawkClient):
             self.scene_to_dynamic_flag = build_scene_to_dynamic_flag(ctx)
 
         if scene in self.scene_to_dynamic_flag:
-            print(f"Flags on Scene: {[i['name'] for i in self.scene_to_dynamic_flag[scene]]}")
+            printl(f"Flags on Scene: {[i['name'] for i in self.scene_to_dynamic_flag[scene]]}")
             return await self._process_dynamic_flags(ctx, self.scene_to_dynamic_flag[scene], True)
         return []
     # Main Loop
@@ -759,6 +830,11 @@ class DSZeldaClient(BizHawkClient):
             if not await self._has_dynamic_requirements(ctx, data):
                 continue
 
+            # Update stage flags
+            if "update_stage_flags" in data and "on_scenes" in data:
+                printl(f"\t{data['name']} is setting stage flags")
+                self.update_stage_flag((data["on_scenes"][0] & 0xFF00) >> 8, data["update_stage_flags"])
+
             # Create read/write lists
             for a, v in data.get("set_if_true", []):
                 read_addr.add(a)
@@ -766,11 +842,11 @@ class DSZeldaClient(BizHawkClient):
                 if type(v) is str:
                     v = self.item_count(ctx, v)
                 set_bits[a] = set_bits.get(a, 0) | v
-                print(f"\tsetting bit for {data['name']}")
+                printl(f"\tsetting bit for {data['name']}")
             for a, v in data.get("unset_if_true", []):
                 read_addr.add(a)
                 unset_bits[a] = unset_bits.get(a, 0) | v
-                print(f"\tunsetting bit for {data['name']}")
+                printl(f"\tunsetting bit for {data['name']}")
             for a, v , *args in data.get("overwrite_if_true", []):
                 read_addr.add(a)
                 if type(v) is str:
@@ -780,7 +856,7 @@ class DSZeldaClient(BizHawkClient):
                         v = max(0, v+args[0])
                 set_bits[a] = v
                 unset_bits[a] = ~v
-                print(f"\toverwriting bit for {data['name']}")
+                printl(f"\toverwriting bit for {data['name']}")
 
             # Special full heal condition
             if "full_heal" in data:
@@ -793,7 +869,7 @@ class DSZeldaClient(BizHawkClient):
         # Write dynamic flags to memory
         read_list = read_addr
         prev = await read_multiple(ctx, read_list)
-        print(f"prevs: {[[a, hex(v)] for a, v in prev.items()]}")
+        printl(f"prevs: {[[a, hex(v)] for a, v in prev.items()]}")
 
         # Calculate values to write
         for a, v in set_bits.items():
@@ -803,17 +879,17 @@ class DSZeldaClient(BizHawkClient):
 
         # Write
         write_list = [a.get_inner_write_list(v) for a, v in prev.items()]
-        print(f"writes: {[(hex(a), hex(v[0])) for a, v, _ in write_list]}")
+        printl(f"writes: {[(hex_f(a), hex_f(v)) for a, v, _ in write_list]}")
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
         return write_list
 
     async def _set_dynamic_entrances(self, ctx, scene):
-        self.er_in_scene = self.er_map.get(scene, dict())
+        self.er_in_scene = self.er_map.get(scene, dict()).copy()
         self.er_messages.clear()
         if not self.dynamic_entrances_by_scene:
             self.dynamic_entrances_by_scene = build_scene_to_dynamic_entrance(ctx)
 
-        print(f"Setting dynamic Entrances on {hex(scene)}:")
+        printl(f"Setting dynamic Entrances on {hex(scene)}:")
         for data in self.dynamic_entrances_by_scene.get(scene, dict()).values():
 
             # Check requirements
@@ -831,7 +907,12 @@ class DSZeldaClient(BizHawkClient):
                 self.er_in_scene[detect_data] = data["exit_data"]
                 if "message" in data:
                     self.er_messages[detect_data] = data.get("message", None)
-            print(f"\t{detect_data} => {data['exit_data']}")
+            printl(f"\t{detect_data} => {data['exit_data']}")
+
+    def update_stage_flag(self, stage: int, new: list[int]):
+        self.stage_flags[stage] = [o | n for o, n in itertools.zip_longest(self.stage_flags.get(stage, [0,0,0,0]), new, fillvalue=0)]
+        print(f"Updating Stage Flags: {hex_f(stage)} {hex_f(new)} : {hex_f(self.stage_flags[stage])}")
+        self.reload_stage_flags = True
 
     async def _has_dynamic_requirements(self, ctx, data) -> bool:
         def check_items(d):
@@ -852,7 +933,7 @@ class DSZeldaClient(BizHawkClient):
 
             for op in operations:
                 for want_item, *_ in d[op]:
-                    # print(f"Operation {op} = {d[op]}")
+                    # printl(f"Operation {op} = {d[op]}")
                     if want_item in item_counts:
                         continue
                     item_counts[want_item] = self.item_count(ctx, want_item)
@@ -872,7 +953,7 @@ class DSZeldaClient(BizHawkClient):
             not_have_counter = 0
             for item, count_want, *operation in d.get("not_has_all_items", []):
                 count_have = item_counts[item]
-                # print(f"count have {count_have} >= {count_want}")
+                # printl(f"count have {count_have} >= {count_want}")
                 if count_have >= count_want:
                     not_have_counter += 1
                 if not_have_counter == len(d["not_has_all_items"]):
@@ -928,7 +1009,7 @@ class DSZeldaClient(BizHawkClient):
             if "has_slot_data" in d:
                 for slot, value, *args in d["has_slot_data"]:
                     slot_value = ctx.slot_data.get(slot, None)
-                    # print(f"\t\tTesting slot {slot_value} {type(slot_value)} {value}")
+                    # printl(f"\t\tTesting slot {slot_value} {type(slot_value)} {value}")
                     if type(value) is list:
                         if slot_value not in value:
                             return False
@@ -946,7 +1027,7 @@ class DSZeldaClient(BizHawkClient):
 
         # Came from particular location
         def check_last_room(d):
-            # print(f"checking last scene {self.last_scene} {d.get('last_scenes', [])}")
+            # printl(f"checking last scene {self.last_scene} {d.get('last_scenes', [])}")
             for i in d.get("not_last_scenes", []):
                 if self.last_scene == i:
                     return False
@@ -969,6 +1050,9 @@ class DSZeldaClient(BizHawkClient):
                     elif "not" in arg_lookup.get(addr, ""):
                         if p & v_lookup[addr]:
                             return False
+                    elif "exact" in arg_lookup.get(addr, ""):
+                        if p != v_lookup[addr]:
+                            return False
             return True
 
         def has_entrance(d):
@@ -980,26 +1064,43 @@ class DSZeldaClient(BizHawkClient):
                     return False
             return True
 
+        def check_traversed_entrances():
+            entrances = data.get("has_traversed_entrances", [])
+            if not entrances:
+                return True
+            if not self.traversed_entrances:
+                return False
+
+            for e in entrances:
+                if ENTRANCES[e].id not in self.traversed_entrances:
+                    return False
+            return True
+
         if not check_items(data):
-            print(f"\t{data['name']} does not have item reqs")
+            printl(f"\t{data['name']} does not have item reqs")
             return False
         if not check_locations(data):
-            print(f"\t{data['name']} does not have location reqs")
+            printl(f"\t{data['name']} does not have location reqs")
             return False
         if not check_slot_data(data):  # Check now happens on load
-            print(f"\t{data['name']} does not have slot data reqs")
+            printl(f"\t{data['name']} does not have slot data reqs")
             return False
         if not check_last_room(data):
-            print(f"\t{data['name']} came from wrong room {self.last_scene}")
+            printl(f"\t{data['name']} came from wrong room {self.last_scene}")
             return False
         if not await check_bits(data):
-            print(f"\t{data['name']} is missing bits")
+            printl(f"\t{data['name']} is missing bits")
+            return False
+        if not has_entrance(data):
+            printl(f"\t{data['name']} has the wrong entrance")
+            return False
+        if not check_traversed_entrances():
+            printl(f"\t{data['name']} has not traversed entrances")
             return False
         if not await self.has_special_dynamic_requirements(ctx, data):
             return False
-        if not has_entrance(data):
-            print(f"\t{data['name']} has the wrong entrance")
-            return False
+
+
 
         return True
 
@@ -1029,7 +1130,7 @@ class DSZeldaClient(BizHawkClient):
             if r or (loc_id not in all_checked_locations) or (_item and "always_process" in _item.tags):
                 await self._set_vanilla_item(ctx, location, item)
                 local_checked_locations.add(loc_id)
-            print(f"pre-processed {pre_process}, vanill {self.last_vanilla_item}")
+            printl(f"pre-processed {pre_process}, vanill {self.last_vanilla_item}")
         else:
             # Get link's coords
             link_coords = await self.get_coords(ctx)
@@ -1046,12 +1147,12 @@ class DSZeldaClient(BizHawkClient):
                     location = None
                     continue
 
-                print(f"Processing locs {loc_name}")
-                print(
+                printl(f"Processing locs {loc_name}")
+                printl(
                     f"\tx: {location.get('x_max', 0x8FFFFFFF)} > {link_coords['x']} > {location.get('x_min', -0x8FFFFFFF)}")
-                print(
+                printl(
                     f"\ty: {location.get('y', link_coords['y']) + 1000} > {link_coords['y']} >= {location.get('y', link_coords['y'])}")
-                print(
+                printl(
                     f"\tz: {location.get('z_max', 0x8FFFFFFF)} > {link_coords['z']} > {location.get('z_min', -0x8FFFFFFF)}")
 
 
@@ -1066,7 +1167,8 @@ class DSZeldaClient(BizHawkClient):
 
                     local_checked_locations.add(loc_bytes)
                     await self._set_vanilla_item(ctx, location)
-                    print(f"Got location {loc_name}! with vanilla {self.last_vanilla_item} id {loc_bytes}")
+                    printl(f"Got location {loc_name}! with vanilla {self.last_vanilla_item} id {loc_bytes}")
+
                     if "persistent" not in location:
                         self.locations_in_scene.pop(loc_name)  # Remove location for overlapping purposes
                     break
@@ -1075,18 +1177,18 @@ class DSZeldaClient(BizHawkClient):
         if location is not None:
             if "set_bit" in location:
                 for addr, bit in location["set_bit"]:
-                    print(f"Setting bit {bit} for location vanil {location['vanilla_item']}")
+                    printl(f"Setting bit {bit} for location vanil {location['vanilla_item']}")
                     await addr.set_bits(ctx, bit)
 
             # Delay reset of vanilla item from certain address reads
             if "delay_reset" in location or "read_object" in location:
                 self.delay_reset = 1
-                print(f"Started Delay Reset for {self.last_vanilla_item}")
+                printl(f"Started Delay Reset for {self.last_vanilla_item}")
 
         # Send locations
-        # print(f"Local locations: {local_checked_locations} in \n{all_checked_locations}")
+        # printl(f"Local locations: {local_checked_locations} in \n{all_checked_locations}")
         if any([i not in all_checked_locations for i in local_checked_locations]):
-            print(f"Sending Locations: {local_checked_locations}")
+            printl(f"Sending Locations: {local_checked_locations}")
             await ctx.send_msgs([{
                 "cmd": "LocationChecks",
                 "locations": list(local_checked_locations)
@@ -1128,16 +1230,18 @@ class DSZeldaClient(BizHawkClient):
                 if "Potion" in item:
                     overflow_item = self.item_data[item].overflow_item
                     self.delay_pickup[1].append([loc, overflow_item, await self.get_item_read(ctx, overflow_item)])
-        print(f"Delay pickup {self.delay_pickup}")
+        printl(f"Delay pickup {self.delay_pickup}")
     # Processes events defined in data\dynamic_flags.py
 
     async def _set_vanilla_item(self, ctx, location, vanilla_item: str | None = None):
         item: str | list[str] = vanilla_item or location.get("vanilla_item", None)
         if item is None:
             return
+        if location.get("farmable", "") not in ["", "conditional"] and location["id"] in ctx.checked_locations:
+            return
         if isinstance(item, str):
             item_data = self.item_data[item]
-            print(f"Setting vanilla for {item_data}")
+            printl(f"Setting vanilla for {item_data}")
             if item is not None and not hasattr(item_data, "dummy"):
                 if ("incremental" in item_data.tags
                         or hasattr(item_data, "progressive")
@@ -1185,19 +1289,19 @@ class DSZeldaClient(BizHawkClient):
 
         # Increment in-game items received count
         write_list = self.addr_received_item_index.get_write_list(num_received_items+1)
-        print(f"Vanilla item: {self.last_vanilla_item} for {item_name}")
+        printl(f"Vanilla item: {self.last_vanilla_item} for {item_name}")
 
         # If same as vanilla item don't remove
         if self.last_vanilla_item and item_name == self.last_vanilla_item[-1] and "always_process" not in item_data.tags:
             self.last_vanilla_item.pop()
-            print(f"oops it's vanilla or dummy! {self.last_vanilla_item}")
+            printl(f"oops it's vanilla or dummy! {self.last_vanilla_item}")
         elif self.current_scene not in getattr(item_data, "blocked_scenes", []):
             write_list += await item_data.receive_item(self, ctx, num_received_items)
 
         # Write the new item to memory!
-        print("Write list:")
+        printl("Write list:")
         for addr, v, domain in write_list:
-            print(f"  {hex(addr)}: {v} ({domain})")
+            printl(f"  {hex(addr)}: {v} ({domain})")
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
 
         # Post Processes
@@ -1265,7 +1369,7 @@ class DSZeldaClient(BizHawkClient):
         pass
 
     async def _remove_vanilla_item(self, ctx: "BizHawkClientContext", num_received_items):
-        print(f"Removing vanilla items {self.last_vanilla_item}")
+        printl(f"Removing vanilla items {self.last_vanilla_item}")
         for item in self.last_vanilla_item:
             if isinstance(item, str):
                 item_object = self.item_data[item]
@@ -1303,7 +1407,7 @@ class DSZeldaClient(BizHawkClient):
         self.cycle_counter += 1
         if not self.cycle_counter % 2000:
             self.cycle_counter = 0
-            print(f"--")
+            printl(f"--")
         num_received_items: int or None = read_result.get(self.addr_received_item_index, None)
         if ctx.server and not ctx.server.socket.open:
             logger.warning(f"Bad Disconnect, tried running code without server connection")
@@ -1331,6 +1435,12 @@ class DSZeldaClient(BizHawkClient):
 
             await self.process_slow(ctx, read_result)
 
+            # Set up delay room action
+            if self._delay_room_action:
+                self._delay_room_action -= 1
+                if self._delay_room_action <= 0:
+                    await self.delay_room_action(ctx)
+
         # Fast stuff doesn't happen until starting flags are set
         if not self.set_starting_flags:
             return
@@ -1340,16 +1450,16 @@ class DSZeldaClient(BizHawkClient):
             await self.process_fast(ctx, read_result)
 
         # Read for checks on specific global flags
-        if len(self.watches) > 0:
+        if not self.receiving_location and len(self.watches) > 0:
             triggered_watches = []
             watch_result = await read_multiple(ctx, self.watches.values(), keys=self.watches.keys())
             for loc_name, prev_value in watch_result.items():
                 loc_data = LOCATIONS_DATA[loc_name]
-                # print(f"Watch data: {loc_name} {prev_value} {loc_data['value']}")
+                # printl(f"Watch data: {loc_name} {prev_value} {loc_data['value']}")
 
                 comp = prev_value == loc_data["value"] if "exact_read" in loc_data else prev_value & loc_data["value"]
                 if comp:
-                    print(f"Got read item {loc_name} from address BLANK"
+                    printl(f"Got read item {loc_name} from address BLANK"
                           f"looking at bit {loc_data['value']}")
 
                     force_remove = False
@@ -1362,23 +1472,24 @@ class DSZeldaClient(BizHawkClient):
         # Check if link is getting location
         if self.getting_location and not self.receiving_location and self.locations_in_scene is not None:
             self.receiving_location = True
-            print("Receiving Location")
+            printl("Receiving Location")
             if self.delay_reset > 1:
                 self.delay_reset = 0
             await self._process_checked_locations(ctx, None, detection_type=self.getting_location_type)
 
         # Exit location received cs
         if self.receiving_location and not self.getting_location:
+            printl(f"Exiting location receive cs")
             self.receiving_location = False
 
             # Increment delay reset, probably haven't received item yet
             if self.delay_reset == 1:
                 self.delay_reset += 1
-                print(f"Delay Reset still active, {self.delay_reset}")
+                printl(f"Delay Reset still active, {self.delay_reset}")
 
             # Check for delayed pickup first!
             elif self.delay_pickup is not None:
-                print(f"Delay pickup {self.delay_pickup}")
+                printl(f"Delay pickup {self.delay_pickup}")
                 fallback, pickups = self.delay_pickup
                 need_fallback = True
                 location = None
@@ -1386,7 +1497,7 @@ class DSZeldaClient(BizHawkClient):
                     new_item_read = await self.get_item_read(ctx, item)
                     if "Rupee" in item or "Rupoor" in item:
                         if new_item_read - value == self.item_data[item].value:
-                            print(f"\tdelay pickup rupee: {new_item_read - value} == {self.item_data[item].value}")
+                            printl(f"\tdelay pickup rupee: {new_item_read - value} == {self.item_data[item].value}")
                             await self._process_checked_locations(ctx, location, True, item=item)
                             need_fallback = False
                     elif new_item_read != value:
@@ -1402,21 +1513,21 @@ class DSZeldaClient(BizHawkClient):
                 self.last_key_count = 0
                 if self.last_vanilla_item:
                     if self.location_name_to_id[location] in ctx.checked_locations:
-                        print(f"\tAlready found delay pickup location {location}")
+                        printl(f"\tAlready found delay pickup location {location}")
                         await self._remove_vanilla_item(ctx, num_received_items)
                     else:
                         self.delay_pickup_remove_vanilla = True
-                        print("\tDelay Pickup is removing vanilla item")
+                        printl("\tDelay Pickup is removing vanilla item")
 
             # Remove vanilla item
             elif self.last_vanilla_item and not self.delay_pickup_remove_vanilla:
-                print("Item Received Successfully")
+                printl("Item Received Successfully")
                 await self._remove_vanilla_item(ctx, num_received_items)
             await self.process_post_receive(ctx)
 
         if num_received_items is not None and ctx.server and ctx.server.socket.open:
             if num_received_items < len(ctx.items_received):
-                print(f"Received items: {num_received_items}")
+                printl(f"Received items: {num_received_items}")
                 if self._just_entered_game:
                     self._log_received_items = True
                 await self._process_received_items(ctx, num_received_items, self._log_received_items)
@@ -1424,12 +1535,18 @@ class DSZeldaClient(BizHawkClient):
                 self._log_received_items = False
 
             if num_received_items > len(ctx.items_received):
-                print(self.read_result)
+                printl(self.read_result)
                 await self.addr_received_item_index.overwrite(ctx, len(ctx.items_received))
                 logger.info(f"Save file has more items than Multiworld. Probable cause: loaded wrong save file. \n"
                             f"Reset item count to Multiworld's. If this is the wrong save file, you can safely quit without saving.")
 
         await self.detect_warp_to_start(ctx, read_result)
+
+    async def process_fast(self, ctx: "BizHawkClientContext", read_result: dict):
+        """
+        Gets called every 5 cycles in game, or every 0.5 seconds
+        """
+        pass
 
     async def process_slow(self, ctx: "BizHawkClientContext", read_result: dict):
         """
@@ -1437,9 +1554,10 @@ class DSZeldaClient(BizHawkClient):
         """
         pass
 
-    async def process_fast(self, ctx: "BizHawkClientContext", read_result: dict):
+    async def delay_room_action(self, ctx: "BizHawkClientContext"):
         """
-        Gets called every 5 cycles in game, or every 0.5 seconds
+        Gets called on a new room 5 slow cycles after entering.
+        For triggering pesky stuff that takes a while. Not watertight, but works.
         """
         pass
 
@@ -1474,6 +1592,7 @@ class DSZeldaClient(BizHawkClient):
     async def _set_er_coords(self, ctx):
         if self.er_exit_coord_writes:
             await bizhawk.write(ctx.bizhawk_ctx, self.er_exit_coord_writes)
+            printl(f"Setting er coords {hex_f(self.er_exit_coord_writes)}")
             self.er_exit_coord_writes = None
 
     async def enter_special_key_room(self, ctx, stage, scene_id) -> bool:
@@ -1489,7 +1608,7 @@ class DSZeldaClient(BizHawkClient):
 
     async def set_stage_flags(self, ctx, stage):
         """
-        called on entering a new stage. sets stage flags. ST doesn't do this yet
+        called on entering a new stage. sets stage flags.
         :param ctx:
         :param stage:
         :return:
@@ -1527,18 +1646,22 @@ class DSZeldaClient(BizHawkClient):
     async def _load_local_locations(self, ctx: "BizHawkClientContext", scene):
         # Load locations in room into loop
         self.locations_in_scene = self.location_area_to_watches.get(scene, {}).copy()
-        print(f"Locations in scene {hex(scene)}: {list(self.locations_in_scene.keys())}")
+        printl(f"Locations in scene {hex(scene)}: {list(self.locations_in_scene.keys())}")
         self.watches = {}
         sram_read_list = set()
         active_srams = []
         locations_found = ctx.checked_locations
         print_again = False
 
+        if self.locations_in_scene is None:
+            printl(f"\tNo locations in scene")
+            return
+
         def check_slot_data(loc):
             if "slot_data" in loc:
                 for slot, value, *args in location["slot_data"]:
                     slot = ctx.slot_data.get(slot, None)
-                    # print(f"\t\tgot slot {slot} {value}")
+                    # printl(f"\t\tgot slot {slot} {value}")
                     if type(slot) is list:
                         if args and args[0] == "not":
                             if value in slot:
@@ -1550,17 +1673,32 @@ class DSZeldaClient(BizHawkClient):
                         if slot not in value:
                             self.locations_in_scene.pop(loc_name)
                             return False
+            elif "any_slot_data" in loc:
+                for slot, value, *args in location["any_slot_data"]:
+                    slot = ctx.slot_data.get(slot, None)
+                    value = value if isinstance(value, list) else [value]
+                    if slot in value:
+                        return True
+                self.locations_in_scene.pop(loc_name)
+                return False
             return True
 
         async def check_entrance(loc):
             if "from_entrances" in loc:
                 if self.current_entrance not in loc["from_entrances"]:
-                    self.locations_in_scene.pop(loc_name)
+                    printl(f"\tLocation {loc_name} has the wrong entrance {hex_f(self.current_entrance)} {loc['from_entrances']}.")
+                    try:
+                        self.locations_in_scene.pop(loc_name)
+                    except KeyError:
+                        pass
                     return False
-            if "from_coords" in loc:
+            if "from_coords" in loc and self.current_entrance >= 0xFA:
                 coord_data = loc.get("from_coords", {})
                 coords = await self.get_coords(ctx)
-                print(f"\tLocation Coords: {coords} reqs {coord_data}")
+                printl(f"\tLocation Coords: {coords} reqs {coord_data} "
+                       f"{coord_data.get('x_max', 0xFFFFFFF) > coords['x'] > coord_data.get('x_min', -0xFFFFFFF)}"
+                       f"{coord_data.get('y', coords['y']) + 2000 > coords['y'] >= coord_data.get('y', coords['y'])}"
+                       f"{coord_data.get('z_max', 0xFFFFFFF) > coords['z'] > coord_data.get('z_min', -0xFFFFFFF)}")
                 return all([
                     coord_data.get("x_max", 0xFFFFFFF) > coords['x'] > coord_data.get("x_min", -0xFFFFFFF),
                     coord_data.get("y", coords['y']) + 2000 > coords['y'] >= coord_data.get("y", coords['y']),
@@ -1568,27 +1706,25 @@ class DSZeldaClient(BizHawkClient):
                 ])
             return True
 
-        if self.locations_in_scene is None:
-            print(f"\tNo locations in scene")
-            return
-
         # Create memory watches for checks triggerd by flags, and make list for checking sram
         for loc_name, location in self.location_area_to_watches.get(scene, {}).items():
             loc_id = location['id']
 
             # Remove unincluded locations
-            if "slot_data" not in location and loc_id not in ctx.server_locations:
+            if (("slot_data" not in location  # slot data removal handled separately
+                    and loc_id not in ctx.server_locations
+                    and "always_exist" not in location)
+                    or (location.get("farmable", "") == "remove" and loc_id in ctx.checked_locations)):
                 self.locations_in_scene.pop(loc_name)
                 print_again = True
                 continue
 
             # Filter locations by slot data
-            if not check_slot_data(location):
-                print(f"\tLocation {loc_name} has the wrong slotdata.")
+            if not check_slot_data(location) and "always_exist" not in location:
+                # printl(f"\tLocation {loc_name} has the wrong slotdata.")
                 print_again = True
                 continue
             if not await check_entrance(location):
-                print(f"\tLocation {loc_name} has the wrong entrance.")
                 print_again = True
                 continue
 
@@ -1600,19 +1736,19 @@ class DSZeldaClient(BizHawkClient):
             if loc_id in locations_found and "address" in location:
                 read = await location["address"].read(ctx)
                 if read & location["value"] and "persistent" not in location:
-                    print(f"Location {loc_name} has already been found and triggered")
+                    printl(f"Location {loc_name} has already been found and triggered")
                     continue
             else:
                 if "sram_addr" in location and location["sram_addr"] is not None:
                     active_srams.append((loc_name, location["sram_addr"], location["sram_value"]))
                     sram_read_list.add(location["sram_addr"])
-                    print(f"\tCreated sram read for location {loc_name}")
+                    printl(f"\tCreated sram read for location {loc_name}")
 
             if "address" in location:
                 self.watches[loc_name] = location["address"]
 
         if print_again:
-            print(f"Loaded Locations in scene {hex(scene)}: {list(self.locations_in_scene.keys())}")
+            printl(f"Loaded Locations in scene {hex(scene)}: {list(self.locations_in_scene.keys())}")
 
         # Read and set locations missed when bizhawk was disconnected
         if self.save_slot == 0 and len(sram_read_list) > 0:
@@ -1663,7 +1799,7 @@ class DSZeldaClient(BizHawkClient):
                 reset_tracker = (~key_data["filter"]) & key_values[tracker]
                 write_list += tracker.get_write_list(reset_tracker)
 
-            print(f"Finally writing keys to memory {key_address} with value {hex(new_keys)}")
+            printl(f"Finally writing keys to memory {key_address} with value {hex(new_keys)}")
             await bizhawk.write(ctx.bizhawk_ctx, write_list)
 
     async def _process_scouted_locations(self, ctx: "BizHawkClientContext", scene):
@@ -1677,34 +1813,36 @@ class DSZeldaClient(BizHawkClient):
             for args in d.get("slot_data", []):
                 if type(args) is str:
                     option, _value = args, [True]
+                    args2 = []
                 else:
                     option, _value, *args2 = args
 
                 slot = ctx.slot_data.get(option, None)
-                if type(slot) is list:
-                    # print(f"Testing args2 {option} {slot} {_value} {args2}")
+                # print(f"Comparing hint {slot} {option} {_value}")
+                if isinstance(slot, Iterable):
+                    # printl(f"Testing args2 {option} {slot} {_value} {args2}")
                     if args2 and args2[0] == "not":
                         if _value in slot:
-                            print(f"\tCanceled!")
+                            printl(f"\tCanceled!")
                             return False
                     elif _value not in slot:
                         return False
                 else:
-                    _value = [_value] if type(_value) is int else _value  # Support lists of values
-                    if ctx.slot_data.get(option, "unknown_slot_data") not in _value:
+                    _value = [_value] if isinstance(_value, int) else _value  # Support lists of values
+                    if slot not in _value:
                         return False
             return True
 
         local_scouted_locations = set(ctx.locations_scouted)
         if self.hint_scene_to_watches.get(scene, []):
-            print(f"hints {self.hint_scene_to_watches.get(scene, [])}")
+            printl(f"hints {self.hint_scene_to_watches.get(scene, [])}")
         for hint_name in self.hint_scene_to_watches.get(scene, []):
             hint_data = self.hint_data[hint_name]
             # Check requirements
             if not check_items(hint_data):
                 continue
             if not check_slot_data(hint_data):
-                print(f"Hint {hint_name} is missing slot data")
+                printl(f"Hint {hint_name} is missing slot data")
                 continue
 
             # Figure out locations to hint
@@ -1721,7 +1859,7 @@ class DSZeldaClient(BizHawkClient):
                         local_scouted_locations.add(loc_id)
             else:
                 local_scouted_locations.add(self.location_name_to_id[hint_name])
-        print(f"found hints {local_scouted_locations}")
+        printl(f"found hints {local_scouted_locations}")
         # Send hints
         if self.local_scouted_locations != local_scouted_locations:
             self.local_scouted_locations = local_scouted_locations
@@ -1752,7 +1890,7 @@ class DSZeldaClient(BizHawkClient):
     async def store_data(ctx: "BizHawkClientContext", key, data, operation="update", default=None):
         default = list() if default is None else default
         data = list(data) if isinstance(data, set) else data
-        print(f"Storing data: {key} {operation} {data} {default}")
+        printl(f"Storing data: {key} {operation} {data} {default}")
         await ctx.send_msgs([{
             "cmd": "Set",
             "key": key,
@@ -1763,7 +1901,7 @@ class DSZeldaClient(BizHawkClient):
     async def ut_bounce_scene(self, ctx, scene):
         if ctx.slot_data.get("shuffle_overworld_transitions", False):
             scene |= 1 << 16
-        print(f"Storing new scene for UT {hex(scene)}")
+        printl(f"Storing new scene for UT {hex(scene)}")
         await ctx.send_msgs([{
             "cmd": "Set",
             "key": f"{ctx.slot}_{ctx.team}_UT_MAP",
@@ -1784,7 +1922,7 @@ class DSZeldaClient(BizHawkClient):
         Save the current scene to memory. Used in ph for precision warps and st for weird scene stuff from menu
         """
         if read_result.get(save_addr, False) in save_comp and not self.save_spam_protection:
-            print(f"Saving scene {hex(self.current_scene)}")
+            printl(f"Saving scene {hex(self.current_scene)}")
             self.last_saved_scene = self.current_scene
             await self.store_data(ctx, storage_key(ctx, save_key), self.last_saved_scene, "replace", default=0)
             self.save_spam_protection = True
@@ -1802,55 +1940,66 @@ class DSZeldaClient(BizHawkClient):
                 "keys": [key]
             }])
             last_saved_scene = get_stored_data(ctx, save_key)
-            print(f"fetched last saved scene: {last_saved_scene}")
+            printl(f"fetched last saved scene: {last_saved_scene}")
             self.last_saved_scene = last_saved_scene if self.lss_retry_attempts >= 0 else 0 # if last_saved_scene is not None else False
             self.lss_retry_attempts -= 1
 
     @staticmethod
     async def find_table_object(ctx: "BizHawkClientContext", start_offset: int,
-                                check_offset, comp_value: int | list,
-                                size=4,
+                                check_offset: int, comp_value: int | list,
+                                size:int=4,
                                 table_addr: Address = None,
-                                return_index=False, max_search: int = 35) -> Address | tuple[Address, int] | None:
+                                return_index: bool=False, max_search: int = 35,
+                                reverse: bool=True) -> Address | tuple[Address, int] | None:
         """
         Find a specific object from a pointer table.
         Loops backwards from start_offset until the validation check matches.
         :param ctx: BizhawkContext
-        :param start_offset: largest offset in the table the object you want can be found in
+        :param start_offset: offset in table to start searching from
         :param check_offset: offset in the object data to use for validation
         :param comp_value: what check offset needs to equal to validate the object
         :param table_addr: Address for the start of the table to search through
         :param size: size of the comp value read
         :param return_index: return the table index that the correct object was found at along with the object data address
         :param max_search: How far to search. -1 checks the entire table
+        :param reverse: Start backwards for efficiency
         :return: Address of valid object, or tuple of Address and table index
         """
 
+        print(f"Checking multiple addresses: {start_offset}, "
+        f"{check_offset}, {comp_value}, {hex_f(table_addr)}")
+
         async def check_multi(l) -> tuple[Address | None, int]:
-            read_list = [Address.from_pointer(table_addr + 4 * (offset - _i), size=3) for _i in range(l)]
+            if reverse:
+                read_list = [Address.from_pointer(table_addr + 4 * (offset - _i), size=3) for _i in range(l)]
+            else:
+                read_list = [Address.from_pointer(table_addr + 4 * (offset + _i), size=3) for _i in range(l)]
             objects = (await read_multiple(ctx, read_list)).values()
-            objects = [a for a in objects if a]
-            checks = await read_multiple(ctx,
-                                         [Address.from_pointer(a + int(check_offset * 4), size=size) for a in objects])
+            objects = [a for a in objects if 0x400000 > a > 0]
+            print(f"search objects: {hex_f(objects)}")
+            checks = await read_multiple(ctx, [Address.from_pointer(a + int(check_offset * 4), size=size) for a in objects])
             _i = 0
-            print(f"\tobjects: {[hex(o) for o in objects]}")
-            print(f"\tchecks: {checks}")
+            printl(f"\tobjects: {[hex(o) for o in objects]}")
+            printl(f"\tchecks: {hex_f(checks)}")
             for _i, check in enumerate(zip(objects, checks.values())):
                 o, c = check
-                print(f"\t\tcomparing: {c} == {comp_value}")
+                printl(f"\t\tcomparing: {c} == {comp_value} ({hex_f(objects[_i])})")
                 if (isinstance(comp_value, list) and c in comp_value) or c == comp_value:
-                    return Address.from_pointer(o, size=3), _i
-            return None, _i
+                    return Address.from_pointer(o, size=3), _i if reverse else -_i
+            return None, _i if reverse else -_i
 
         check_list = list(range(start_offset + 1))
-        check_list.reverse()
+        if reverse:
+            check_list.reverse()
         batch_size = 8
         for chunk, offset in enumerate(check_list[:max_search:batch_size]):
             remaining = min(len(check_list[chunk * batch_size:]), batch_size)
             ret, chunk_index = await check_multi(remaining)
             if ret:
+                print(f"\tFound {offset} - {chunk_index} {ret}")
+
                 return (ret, offset - chunk_index) if return_index else ret
-        print(f"Could not find matching map object, probably restarted client in already loaded room.")
+        printl(f"Could not find matching map object, probably restarted client in already loaded room.")
         return (None, 0) if return_index else None
 
     async def set_chest_contents(self, ctx):
@@ -1862,7 +2011,7 @@ class DSZeldaClient(BizHawkClient):
             gift_addr = data.get("gift_addr", None)
 
             if gift_addr is not None:
-                # print("gift_addr", isinstance(gift_addr, str), gift_addr, loc)
+                # printl("gift_addr", isinstance(gift_addr, str), gift_addr, loc)
                 if isinstance(gift_addr, str) and gift_addr == "island_shop":
                     # Shops are special
                     if set_shop:
@@ -1870,7 +2019,7 @@ class DSZeldaClient(BizHawkClient):
                     shop_lookup = {0xB: 0x26e324, 0xC: 0x263964, 0x10: 0x2692d4}
                     shop_addr = Address.from_pointer(shop_lookup[self.current_stage])
                     vanilla_item = await shop_addr.read(ctx, silent=True)
-                    print(f"Shop item lookup: {shop_addr} {vanilla_item} {shop_location_lookup.get(vanilla_item)}")
+                    printl(f"Shop item lookup: {shop_addr} {vanilla_item} {shop_location_lookup.get(vanilla_item)}")
                     if shop_location_lookup.get(vanilla_item) == loc:
                         write_list.append(shop_addr.get_inner_write_list(model))
                         set_shop = True
@@ -1878,7 +2027,7 @@ class DSZeldaClient(BizHawkClient):
 
                 gift_addr: list[Address] = gift_addr if isinstance(gift_addr, list) else [gift_addr]
                 for addr in gift_addr:
-                    print(f"\tSetting read item model: {loc} {hex(model)}")
+                    printl(f"\tSetting read item model: {loc} {hex(model)}")
                     write_list.append(addr.get_inner_write_list(model))
 
             elif chest_offset is not None:
@@ -1886,13 +2035,49 @@ class DSZeldaClient(BizHawkClient):
                 if "farmable" in data and data["id"] in ctx.checked_locations:
                     model = 0x7D
                 vanilla_item_model = self.item_data[data["vanilla_item"]].vanilla_model
-                print(f"\tVanilla model {vanilla_item_model} offsets {chest_offset}")
+                printl(f"\tVanilla model {vanilla_item_model} offsets {chest_offset}")
                 chest_obj = await self.find_table_object(ctx, chest_offset, 9, vanilla_item_model, size=1)
                 if chest_obj:
                     chest_content_addr = Address.from_pointer(chest_obj + 9 * 4, 1)
                     write_list.append(chest_content_addr.get_inner_write_list(model))
-                    print(f"Writing {model} to addr {chest_content_addr} for loc {loc}")
+                    printl(f"Writing {model} to addr {chest_content_addr} for loc {loc}")
                 else:
-                    print(f"Could not find chests for item swapping, probably restarted client in already loaded room.")
+                    printl(f"Could not find chests for item swapping, probably restarted client in already loaded room.")
 
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
+
+    @staticmethod
+    async def frame_advance(ctx):
+        await bizhawk.unlock(ctx.bizhawk_ctx)
+        await bizhawk.lock(ctx.bizhawk_ctx)
+
+    @staticmethod
+    async def get_table_data(ctx, array_start, comp_offset, size:int or list=4, table_label=True, table_size=128) -> dict["Address", int | list[int]]:
+        """
+        Collect data from a table of pointers at a given offset.
+        """
+
+        rl = []
+        for i in range(table_size):
+            rl.append(Address.from_pointer(array_start + i * 4, size=3))
+        actors = await read_multiple(ctx, rl)
+        # print(f"Objects: {hex_f(actors)}")
+
+        if table_label:
+            labels = [k for k, v in actors.items() if v]
+        else: labels = None
+
+        # Multiple offsets at once
+        if isinstance(comp_offset, Iterable):
+            actors_start = [[Address.from_pointer(v, size=i) for v in actors.values() if 0 < v < 0x400000] for i in size]
+            reads: dict["Address", list[int]] = {}
+            for i, offset in enumerate(comp_offset):
+                reads_2 = await read_multiple(ctx, actors_start[i], offset=offset * 4, keys=labels)
+                for r, v in reads_2.items():
+                    reads.setdefault(r, [0]*len(comp_offset))[i] = v
+            return reads
+
+        # single offset
+        actors_start = [Address.from_pointer(v, size=size) for v in actors.values() if 0 < v < 0x400000]
+        reads_2 = await read_multiple(ctx, actors_start, offset=comp_offset * 4, keys=labels)
+        return reads_2
