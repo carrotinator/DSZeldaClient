@@ -147,11 +147,15 @@ async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClien
             min(client.item_count(ctx, item.variant[0]), 1) + client.item_count(ctx, item.variant[1]),
             client.item_count(ctx, item.name)
         )
-        print(f"\tProg count: {index}")
+        printl(f"\tProg count: {index}")
     else:
         index = client.item_count(ctx, item.name)
 
     index = min(index, len(item.progressive)-1)
+    if index == len(item.progressive)-1:
+        printl(f"\tHas max {item.name}, cancel removal")
+        return res  # do nothing if already at max
+
     address, value = item.progressive[index]
     if hasattr(item, "give_ammo"):
         if index == 0:
