@@ -255,7 +255,7 @@ class DSItem:
         self.remove_vanilla_func = self.get_remove_vanilla_function()
 
     def get_receive_function(self):
-        if "Small Key" in self.name:
+        if "Small Key" in self.name or "Keyring" in self.name:
             return receive_small_key
         if hasattr(self, "refill"):
             return receive_refill
