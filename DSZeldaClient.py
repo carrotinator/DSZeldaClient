@@ -1430,13 +1430,13 @@ class DSZeldaClient(BizHawkClient):
             else:
                 self.set_starting_flags = True
 
-            # Finished game?
-            if not ctx.finished_game:
-                await self._process_game_completion(ctx)
-
             # Process Deathlink
             if "DeathLink" in ctx.tags:
                 await self.process_deathlink(ctx, self.is_dead, self.current_stage, read_result)
+
+            # Finished game?
+            if not ctx.finished_game:
+                await self._process_game_completion(ctx)
 
             await self.process_slow(ctx, read_result)
 
