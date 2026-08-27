@@ -174,6 +174,11 @@ class DSZeldaClient(BizHawkClient):
                 return True
         return False
 
+    def count_from_group(self, ctx: "BizHawkClientContext", group_name: str):
+        group_ids = [self.item_data[i].id for i in ITEM_GROUPS[group_name]]
+        return sum([1 for i in ctx.items_received if i in group_ids])
+
+
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
         try:
             if not await self.check_game_version(ctx):
