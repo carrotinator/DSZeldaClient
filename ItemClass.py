@@ -144,10 +144,12 @@ async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClien
 
     if hasattr(item, "variant") and client.item_count(ctx, item.variant[0]):
         index = max(
-            min(client.item_count(ctx, item.variant[0]), 1) + client.item_count(ctx, item.variant[1]),
+            min(client.item_count(ctx, item.variant[0]), -1) + client.item_count(ctx, item.variant[1]),
             client.item_count(ctx, item.name)
         )
         printl(f"\tProg count: {index}")
+    elif hasattr(item, "extra_variants") and any([client.item_count(ctx, i) >= v for i, v in item.extra_variants.items()]):
+        index = 1 + max([client.item_count(ctx, i) for i in item.extra_variants_upgrades])
     else:
         index = client.item_count(ctx, item.name)
 
@@ -221,6 +223,8 @@ class DSItem:
     refill: str  # item reference for refill data
     variant: list[str]  # progressive items that have non-progressive counterparts, for vanilla removal
     variant_prog: list[str]  # for non-progressive items to calc ammo
+    extra_variants: dict[str, int]  # progressive items that have additional non-progressive counterparts, with how many of that item are required to not remove the base item.
+    extra_variants_upgrades: list[str]  # what upgrades to count when an extra variant is found
 
     # Extra bits
     set_bit: list[tuple["Address", int]]
