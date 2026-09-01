@@ -873,8 +873,8 @@ class DSZeldaClient(BizHawkClient):
 
         # Write dynamic flags to memory
         read_list = read_addr
-        prev = await read_multiple(ctx, read_list)
-        printl(f"prevs: {[[a, hex(v)] for a, v in prev.items()]}")
+        prev: dict["Address", int] = await read_multiple(ctx, read_list)
+        prev_ref = prev.copy()
 
         # Calculate values to write
         for a, v in set_bits.items():
@@ -882,10 +882,17 @@ class DSZeldaClient(BizHawkClient):
         for a, v in unset_bits.items():
             prev[a] = prev[a] & (~v)
 
+        # Don't write addresses that don't change
+        for addr in prev_ref:
+            if prev_ref[addr] == prev[addr]:
+                prev.pop(addr)
+
         # Write
         write_list = [a.get_inner_write_list(v) for a, v in prev.items()]
-        printl(f"writes: {[(hex_f(a), hex_f(v)) for a, v, _ in write_list]}")
-        await bizhawk.write(ctx.bizhawk_ctx, write_list)
+        if write_list:
+            printl(f"\tprevs: {[[a, hex(v)] for a, v in prev_ref.items()]}")
+            printl(f"\twrites: {[(hex_f(a), hex_f(v)) for a, v, _ in write_list]}")
+            await bizhawk.write(ctx.bizhawk_ctx, write_list)
         return write_list
 
     async def _set_dynamic_entrances(self, ctx, scene):
@@ -1812,6 +1819,11 @@ class DSZeldaClient(BizHawkClient):
             for item in d.get("has_items", []):
                 if self.item_data[item].id not in [i.item for i in ctx.items_received]:
                     return False
+            for item in d.get("any_has_items", []):
+                if self.item_data[item].id in [i.item for i in ctx.items_received]:
+                    return True
+            if d.get("any_has_items", []):
+                return False
             return True
 
         def check_slot_data(d):
@@ -1864,7 +1876,8 @@ class DSZeldaClient(BizHawkClient):
                         local_scouted_locations.add(loc_id)
             else:
                 local_scouted_locations.add(self.location_name_to_id[hint_name])
-        printl(f"found hints {local_scouted_locations}")
+        if local_scouted_locations:
+            printl(f"found hints {local_scouted_locations}")
         # Send hints
         if self.local_scouted_locations != local_scouted_locations:
             self.local_scouted_locations = local_scouted_locations
@@ -2049,7 +2062,9 @@ class DSZeldaClient(BizHawkClient):
                 else:
                     printl(f"Could not find chests for item swapping, probably restarted client in already loaded room.")
 
-        await bizhawk.write(ctx.bizhawk_ctx, write_list)
+        if write_list:
+            printl(f"Setting chest contents: {hex_f(write_list)}")
+            await bizhawk.write(ctx.bizhawk_ctx, write_list)
 
     @staticmethod
     async def frame_advance(ctx):

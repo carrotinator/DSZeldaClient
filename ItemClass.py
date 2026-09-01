@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 async def receive_small_key(client: "DSZeldaClient", ctx: "BizHawkClientContext", item: "DSItem", num_received_items):
     res = []
     key_count = item.value if item.name.startswith("Keyring") else 1
+    print(f"Receiving key {item.name} {key_count}")
 
     async def write_keys_to_storage(dungeon) -> tuple[int, list, str]:
         from ..data.Constants import DUNGEON_KEY_DATA
@@ -263,7 +264,7 @@ class DSItem:
         self.remove_vanilla_func = self.get_remove_vanilla_function()
 
     def get_receive_function(self):
-        if "Small Key" in self.name or "Keyring" in self.name:
+        if self.name.startswith("Small Key") or self.name.startswith("Keyring"):
             return receive_small_key
         if hasattr(self, "refill"):
             return receive_refill
