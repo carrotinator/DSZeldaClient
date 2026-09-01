@@ -144,11 +144,11 @@ async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClien
     res = []
 
     if hasattr(item, "variant") and client.item_count(ctx, item.variant[0]):
-        index = max(
-            min(client.item_count(ctx, item.variant[0]), -1) + client.item_count(ctx, item.variant[1]),
-            client.item_count(ctx, item.name)
-        )
-        printl(f"\tProg count: {index}")
+        index = min(max(client.item_count(ctx, item.variant[0]) + client.item_count(ctx, item.variant[1]),
+            client.item_count(ctx, item.name)), len(item.progressive))
+
+
+        printl(f"\tProg count: {index} items_received: {num_received_items}/{len(ctx.items_received)}")
     elif hasattr(item, "extra_variants") and any([client.item_count(ctx, i) >= v for i, v in item.extra_variants.items()]):
         index = 1 + max([client.item_count(ctx, i) for i in item.extra_variants_upgrades])
     else:
