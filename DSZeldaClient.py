@@ -1723,13 +1723,13 @@ class DSZeldaClient(BizHawkClient):
             loc_id = location['id']
 
             # Remove unincluded locations
-            if (("slot_data" not in location  # slot data removal handled separately
-                    and loc_id not in ctx.server_locations
-                    and "always_exist" not in location)
-                    or (location.get("farmable", "") == "remove" and loc_id in ctx.checked_locations)):
-                self.locations_in_scene.pop(loc_name)
-                print_again = True
-                continue
+            # if (("slot_data" not in location  # slot data removal handled separately
+            #         and loc_id not in ctx.server_locations
+            #         and "always_exist" not in location)
+            #         or (location.get("farmable", "") == "remove" and loc_id in ctx.checked_locations)):
+            #     self.locations_in_scene.pop(loc_name)
+            #     print_again = True
+            #     continue
 
             # Filter locations by slot data
             if not check_slot_data(location) and "always_exist" not in location:
