@@ -631,8 +631,9 @@ class DSZeldaClient(BizHawkClient):
         for adr, _value in STARTING_FLAGS:
             write_list += adr.get_write_list(_value)
         printl(f"normal flags wl: {hex_f(write_list)}")
-        write_list += await self.set_special_starting_flags(ctx)
         await bizhawk.write(ctx.bizhawk_ctx, write_list)
+        special_write_list = await self.set_special_starting_flags(ctx)
+        await bizhawk.write(ctx.bizhawk_ctx, special_write_list)
 
     async def set_special_starting_flags(self, ctx: "BizHawkClientContext") -> list[tuple[int, list, str]]:
         """
