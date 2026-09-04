@@ -51,6 +51,39 @@ async def write_multiple(ctx, addresses: Iterable["Address"], values: Iterable[i
     # print(f"Writing: {hex_f(writes)}")
     await bizhawk.write(ctx.bizhawk_ctx, writes)
 
+def compare_slot_data(ctx, data):
+    if "has_slot_data" in data:
+        for a in data["has_slot_data"]:
+            if isinstance(a, str):
+                slot, value, args = a, [1], []
+            else:
+                slot, value, *args = a
+
+            slot_value = ctx.slot_data.get(slot, None)
+            # printl(f"\t\tTesting slot {slot_value} {type(slot_value)} {value}")
+            if type(value) is list:
+                if slot_value not in value:
+                    return False
+            elif isinstance(slot_value, list):
+                if args and args[0] == "not":
+                    if value in slot_value:
+                        return False
+                else:
+                    if value not in slot_value:
+                        return False
+            else:
+                if slot_value != value:
+                    return False
+
+    if "any_slot_data" in data:
+        for slot, value, *args in data["any_slot_data"]:
+            slot = ctx.slot_data.get(slot, None)
+            value = value if isinstance(value, list) else [value]
+            if slot not in value:
+                return True
+        return False
+
+    return True
 
 # Get address from pointer
 async def get_address_from_heap(ctx, pointer, offset=0, size=4) -> "Address":

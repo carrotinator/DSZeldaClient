@@ -9,7 +9,7 @@ import worlds._bizhawk as bizhawk
 from worlds._bizhawk.client import BizHawkClient
 from ..data.Constants import *
 from ..Util import *
-from .subclasses import read_multiple, write_multiple, storage_key, get_stored_data, hex_f, printl, print_debug
+from .subclasses import read_multiple, write_multiple, storage_key, get_stored_data, hex_f, printl, print_debug, compare_slot_data
 from ..data.Items import ITEM_GROUPS
 
 from ..data.Addresses import *
@@ -72,6 +72,9 @@ class DSZeldaClient(BizHawkClient):
     stage_flag_offset: int
     er_y_offest: int # In ph i use coords who's y is 164 off the entrance y
     map_warp: "DSTransition" or None
+
+    ammo_addresses: list[Address] = []
+    last_ammo_count: list[int] = []
 
     def __init__(self) -> None:
         super().__init__()
@@ -1019,23 +1022,8 @@ class DSZeldaClient(BizHawkClient):
             if d.get("on_scenes", False):
                 return True  # slot data is checked on load for scenes
 
-            if "has_slot_data" in d:
-                for slot, value, *args in d["has_slot_data"]:
-                    slot_value = ctx.slot_data.get(slot, None)
-                    # printl(f"\t\tTesting slot {slot_value} {type(slot_value)} {value}")
-                    if type(value) is list:
-                        if slot_value not in value:
-                            return False
-                    elif type(slot_value) is list:
-                        if args and args[0] == "not":
-                            if value in slot_value:
-                                return False
-                        else:
-                            if value not in slot_value:
-                                return False
-                    else:
-                        if slot_value != value:
-                            return False
+            if not compare_slot_data(ctx, d):
+                return False
             return True
 
         # Came from particular location
@@ -1671,27 +1659,7 @@ class DSZeldaClient(BizHawkClient):
             return
 
         def check_slot_data(loc):
-            if "slot_data" in loc:
-                for slot, value, *args in location["slot_data"]:
-                    slot = ctx.slot_data.get(slot, None)
-                    # printl(f"\t\tgot slot {slot} {value}")
-                    if type(slot) is list:
-                        if args and args[0] == "not":
-                            if value in slot:
-                                return False
-                        elif value not in slot:
-                            return False
-                    else:
-                        value = value if isinstance(value, list) else [value]
-                        if slot not in value:
-                            self.locations_in_scene.pop(loc_name)
-                            return False
-            elif "any_slot_data" in loc:
-                for slot, value, *args in location["any_slot_data"]:
-                    slot = ctx.slot_data.get(slot, None)
-                    value = value if isinstance(value, list) else [value]
-                    if slot in value:
-                        return True
+            if not compare_slot_data(ctx, loc):
                 self.locations_in_scene.pop(loc_name)
                 return False
             return True
@@ -1748,7 +1716,8 @@ class DSZeldaClient(BizHawkClient):
                 self.watches[loc_name] = watch_addr
             if loc_id in locations_found and "address" in location:
                 read = await location["address"].read(ctx)
-                if read & location["value"] and "persistent" not in location:
+                comp = read == location["value"] if "exact_read" in location else read & location["value"]
+                if comp and "persistent" not in location:
                     printl(f"Location {loc_name} has already been found and triggered")
                     continue
             else:
@@ -1827,30 +1796,6 @@ class DSZeldaClient(BizHawkClient):
                 return False
             return True
 
-        def check_slot_data(d):
-            for args in d.get("slot_data", []):
-                if type(args) is str:
-                    option, _value = args, [True]
-                    args2 = []
-                else:
-                    option, _value, *args2 = args
-
-                slot = ctx.slot_data.get(option, None)
-                # print(f"Comparing hint {slot} {option} {_value}")
-                if isinstance(slot, Iterable):
-                    # printl(f"Testing args2 {option} {slot} {_value} {args2}")
-                    if args2 and args2[0] == "not":
-                        if _value in slot:
-                            printl(f"\tCanceled!")
-                            return False
-                    elif _value not in slot:
-                        return False
-                else:
-                    _value = [_value] if isinstance(_value, int) else _value  # Support lists of values
-                    if slot not in _value:
-                        return False
-            return True
-
         local_scouted_locations = set(ctx.locations_scouted)
         if self.hint_scene_to_watches.get(scene, []):
             printl(f"hints {self.hint_scene_to_watches.get(scene, [])}")
@@ -1859,7 +1804,7 @@ class DSZeldaClient(BizHawkClient):
             # Check requirements
             if not check_items(hint_data):
                 continue
-            if not check_slot_data(hint_data):
+            if not compare_slot_data(ctx, hint_data):
                 printl(f"Hint {hint_name} is missing slot data")
                 continue
 
@@ -2079,6 +2024,7 @@ class DSZeldaClient(BizHawkClient):
         """
 
         rl = []
+        # print(f"Table size: {table_size} max {hex_f(array_start+table_size*4)}")
         for i in range(table_size):
             rl.append(Address.from_pointer(array_start + i * 4, size=3))
         actors = await read_multiple(ctx, rl)

@@ -63,7 +63,11 @@ async def receive_refill(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
             len(item.give_ammo)) - 1
 
     if prog_received >= 0:
-        res += item.address.get_write_list(item.give_ammo[prog_received])
+        if client.current_scene in getattr(item, "block_ammo", []):
+            ammo_index = client.ammo_addresses.index(item.address)
+            client.last_ammo_count[ammo_index] = item.give_ammo[prog_received]
+        else:
+            res += item.address.get_write_list(item.give_ammo[prog_received])
 
     return res
 
@@ -124,7 +128,11 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
             if item.name == item.variant_prog[1] or client.item_count(ctx, item.variant_prog[1]):
                 ammo_list = client.item_data[item.variant_prog[0]].give_ammo
                 prog = min(len(ammo_list)-1, client.item_count(ctx, item.variant_prog[2]))
-                res += item.ammo_address.get_write_list(ammo_list[prog])
+                if client.current_scene in getattr(item, "block_ammo", []):
+                    ammo_index = client.ammo_addresses.index(item.ammo_address)
+                    client.last_ammo_count[ammo_index] = ammo_list[prog]
+                else:
+                    res += item.ammo_address.get_write_list(ammo_list[prog])
         else:
             prog_received = min(prog_received, len(item.give_ammo)-1)
             res += item.ammo_address.get_write_list(item.give_ammo[prog_received])
@@ -226,6 +234,7 @@ class DSItem:
     variant_prog: list[str]  # for non-progressive items to calc ammo
     extra_variants: dict[str, int]  # progressive items that have additional non-progressive counterparts, with how many of that item are required to not remove the base item.
     extra_variants_upgrades: list[str]  # what upgrades to count when an extra variant is found
+    block_ammo: list[int]  # Scenes to delay ammo in
 
     # Extra bits
     set_bit: list[tuple["Address", int]]
