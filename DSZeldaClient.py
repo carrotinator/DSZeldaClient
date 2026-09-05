@@ -534,6 +534,11 @@ class DSZeldaClient(BizHawkClient):
                         await self.refill_ammo(ctx)
                         self.heal_on_load = False
 
+                # safety for delay_pickup_remove_vanilla
+                if self.delay_pickup_remove_vanilla:
+                    await self._remove_vanilla_item(ctx, num_items_received)
+                    self.delay_pickup_remove_vanilla = False
+
                 # Hard coded room stuff
                 await self.process_hard_coded_rooms(ctx, current_scene)
                 self._delay_room_action = 3
@@ -1283,7 +1288,6 @@ class DSZeldaClient(BizHawkClient):
         next_item_id = ctx.items_received[num_received_items].item
         item_name = self.item_id_to_name[next_item_id]
         item_data = self.item_data[item_name]
-        local_item = ctx.items_received[num_received_items].player == ctx.slot
 
         if log_items:
             logger.info(f"Received Backlogged Item: {item_name}")
@@ -1308,7 +1312,7 @@ class DSZeldaClient(BizHawkClient):
         # Post Processes
         if self.current_scene in getattr(item_data, "reload_entrances", []):
             await self._set_dynamic_entrances(ctx, self.current_scene)
-        if self.delay_pickup_remove_vanilla and local_item:
+        if self.delay_pickup_remove_vanilla:
             self.delay_pickup_remove_vanilla = False
             await self._remove_vanilla_item(ctx, num_received_items)
 
