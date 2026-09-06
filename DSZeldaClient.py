@@ -134,7 +134,6 @@ class DSZeldaClient(BizHawkClient):
         self.current_entrance = None
 
         self.new_stage_loading = None
-        self.getting_location_type = None
 
         self._entered_entrance = False
         self._loading_scene = False
@@ -1478,7 +1477,7 @@ class DSZeldaClient(BizHawkClient):
             printl("Receiving Location")
             if self.delay_reset > 1:
                 self.delay_reset = 0
-            await self._process_checked_locations(ctx, None, detection_type=self.getting_location_type)
+            await self._process_checked_locations(ctx, None, detection_type=self.getting_location)
 
         # Exit location received cs
         if self.receiving_location and not self.getting_location:
