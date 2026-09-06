@@ -1460,7 +1460,7 @@ class DSZeldaClient(BizHawkClient):
                 loc_data = LOCATIONS_DATA[loc_name]
                 # printl(f"Watch data: {loc_name} {prev_value} {loc_data['value']}")
 
-                comp = prev_value == loc_data.value if loc_data.exact_read else prev_value & loc_data.value
+                comp = loc_data.compare(prev_value)
                 if comp:
                     printl(f"Got read item {loc_name} from address BLANK"
                           f"looking at bit {loc_data['value']}")

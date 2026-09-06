@@ -7,11 +7,11 @@ class DSLocation:
     name: str
     id: int
     scenes: set[int] | int | None = None
-    region: str = ""
+    region: str | None = None
     from_entrances: list[int] | None = None
 
-    vanilla_item: str = ""
-    item_override: str = ""
+    vanilla_item: str | None = None
+    item_override: str | None = None
 
     y: int | None = None
     x_max: int | None = None
@@ -62,6 +62,21 @@ class DSLocation:
     #             print(f"Unknown location attribute: {key}: {value}")
     #         setattr(self, key, value)
 
+    def compare(self, comp_value):
+        return comp_value == self.value if self.exact_read else comp_value & self.value
+
+    def check_coords(self, link_coords):
+        printl(
+            f"\tx: {self.get('x_max', 0x8FFFFFFF)} > {link_coords['x']} > {self.get('x_min', -0x8FFFFFFF)}")
+        printl(
+            f"\ty: {self.get('y', link_coords['y']) + 1000} > {link_coords['y']} >= {self.get('y', link_coords['y'])}")
+        printl(
+            f"\tz: {self.get('z_max', 0x8FFFFFFF)} > {link_coords['z']} > {self.get('z_min', -0x8FFFFFFF)}")
+
+        return (self.get("x_max", 0x8FFFFFFF) > link_coords["x"] > self.get("x_min", -0x8FFFFFFF) and
+                        self.get("z_max", 0x8FFFFFFF) > link_coords["z"] > self.get("z_min", -0x8FFFFFFF) and
+                        self.get("y", link_coords["y"]) + 1000 > link_coords["y"] >= self.get("y", link_coords["y"]))
+
     def get(self, attribute, default:Any=False):
         res = getattr(self, attribute, default)
         if res is None:
@@ -76,18 +91,3 @@ class DSLocation:
 
     def __setitem__(self, key, value):
         return setattr(self, key, value)
-
-    def compare(self, value):
-        return value == self.value if self.exact_read else value & self.value
-
-    def check_coords(self, link_coords):
-        printl(
-            f"\tx: {self.get('x_max', 0x8FFFFFFF)} > {link_coords['x']} > {self.get('x_min', -0x8FFFFFFF)}")
-        printl(
-            f"\ty: {self.get('y', link_coords['y']) + 1000} > {link_coords['y']} >= {self.get('y', link_coords['y'])}")
-        printl(
-            f"\tz: {self.get('z_max', 0x8FFFFFFF)} > {link_coords['z']} > {self.get('z_min', -0x8FFFFFFF)}")
-
-        return (self.get("x_max", 0x8FFFFFFF) > link_coords["x"] > self.get("x_min", -0x8FFFFFFF) and
-                        self.get("z_max", 0x8FFFFFFF) > link_coords["z"] > self.get("z_min", -0x8FFFFFFF) and
-                        self.get("y", link_coords["y"]) + 1000 > link_coords["y"] >= self.get("y", link_coords["y"]))
