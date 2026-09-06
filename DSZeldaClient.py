@@ -541,7 +541,7 @@ class DSZeldaClient(BizHawkClient):
 
                 # safety for delay_pickup_remove_vanilla
                 if self.delay_pickup_remove_vanilla:
-                    await self._remove_vanilla_item(ctx, num_items_received)
+                    await self._remove_vanilla_item(ctx, num_received_items)
                     self.delay_pickup_remove_vanilla = False
 
                 # Hard coded room stuff

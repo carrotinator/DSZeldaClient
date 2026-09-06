@@ -235,10 +235,12 @@ class Address:
         return await self.overwrite(ctx, [p & (~v) for p, v in zip(prev, value)], silent=silent, offset=offset)
 
 
-    def __repr__(self, region="eu"):
+    def __repr__(self):
+        return f"PHAddr.{self.name}"
         return f"Address Object {hex_f(self.get_address(region))} {self.name}"
 
     def __str__(self):
+        return f"PHAddr.{self.name}"
         name = f"{self.name}: " if self.name else ""
         return f"{name}{hex(self.get_address())}"
 
@@ -343,6 +345,9 @@ class SRAM(Address):
         if not silent:
             print(f"\tReading address {self}, got value {hex(res)}")
         return res
+
+    def __repr__(self):
+        return f"SRAM.{self.name}"
 
 class DSTransition:
     """
