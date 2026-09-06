@@ -1819,7 +1819,7 @@ class DSZeldaClient(BizHawkClient):
                     locations_checked = ctx.locations_scouted
                     for loc in hint_data["locations"]:
                         loc_id = self.location_name_to_id[loc]
-                        if loc_id in locations_checked:
+                        if loc_id in locations_checked or loc_id not in ctx.server_locations:
                             continue
                         local_scouted_locations.add(loc_id)
             else:

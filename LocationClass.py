@@ -20,9 +20,10 @@ class DSLocation:
     z_min: int | None = None
 
     address: Address | None = None
-    value: int | None = None
+    value: int = 1
     chest_offset: int | None = None
     gift_addr: Address | str | list[Address] | None = None
+    shop_model: bool = False  # gift_addr for shop models are set during actor loop
     exact_read: bool = False
     do_special: str | dict = ""
     read_object: bool = False  # read the chest opening instead of normal triggers
@@ -32,7 +33,7 @@ class DSLocation:
     delay_pickup: str | list[str] | None = None
     conditional: bool | str = False
     farmable: bool | str = False
-    slot_data: list[Iterable] | None = None
+    has_slot_data: list[Iterable] | None = None
     reload_chests: bool = False
     force_vanilla: bool = False
     persistent: bool = False  # don't remove from local locations in scene after triggering
@@ -53,6 +54,8 @@ class DSLocation:
     def __post_init__(self):
         if isinstance(self.scenes, int):
             self.scenes = {self.scenes}
+        if self.shop_model:
+            self.exact_read = True
 
     # def __init__(self, name, **kwargs):
     #     self.name = name

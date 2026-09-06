@@ -236,11 +236,9 @@ class Address:
 
 
     def __repr__(self):
-        return f"PHAddr.{self.name}"
-        return f"Address Object {hex_f(self.get_address(region))} {self.name}"
+        return f"Address Object {hex_f(self.get_address())} {self.name}"
 
     def __str__(self):
-        return f"PHAddr.{self.name}"
         name = f"{self.name}: " if self.name else ""
         return f"{name}{hex(self.get_address())}"
 
@@ -346,9 +344,6 @@ class SRAM(Address):
             print(f"\tReading address {self}, got value {hex(res)}")
         return res
 
-    def __repr__(self):
-        return f"SRAM.{self.name}"
-
 class DSTransition:
     """
     Datastructures for dealing with Transitions on the client side.
@@ -385,7 +380,6 @@ class DSTransition:
         self.vanilla_reciprocal: DSTransition | None = None  # Paired location
 
         self.copy_number = 0
-
 
     def get_scene(self):
         if self.room:
