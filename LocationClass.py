@@ -38,6 +38,7 @@ class DSLocation:
     force_vanilla: bool = False
     persistent: bool = False  # don't remove from local locations in scene after triggering
     always_exist: bool = False
+    restock: str = ""  # the category it's restocked behind, allowing it out early when applicable
 
     dungeon: str = ""  # for in_own_dungeon gen and dungeon exclusion
     boss_room: str = ""
