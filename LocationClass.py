@@ -1,6 +1,6 @@
-from .subclasses import Address
+from .subclasses import Address, printl
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Any
 
 @dataclass
 class DSLocation:
@@ -29,12 +29,14 @@ class DSLocation:
     set_bit: list[Iterable] | None = None
 
     delay_reset: bool = False  # don't reset vanilla item from this location until getting another location or changing scene
-    delay_pickup: str | list[str] = ""
+    delay_pickup: str | list[str] | None = None
     conditional: bool | str = False
-    farmable: bool = False
+    farmable: bool | str = False
     slot_data: list[Iterable] | None = None
     reload_chests: bool = False
-    persistent: bool = False
+    force_vanilla: bool = False
+    persistent: bool = False  # don't remove from local locations in scene after triggering
+    always_exist: bool = False
 
     dungeon: str = ""  # for in_own_dungeon gen and dungeon exclusion
     boss_room: str = ""
@@ -60,5 +62,32 @@ class DSLocation:
     #             print(f"Unknown location attribute: {key}: {value}")
     #         setattr(self, key, value)
 
-    def get(self, attribute, default=False):
-        return getattr(self, attribute, default)
+    def get(self, attribute, default:Any=False):
+        res = getattr(self, attribute, default)
+        if res is None:
+            return default
+        return res
+
+    def __contains__(self, item):
+        return self.get(item)
+
+    def __getitem__(self, item):
+        return self.get(item)
+
+    def __setitem__(self, key, value):
+        return setattr(self, key, value)
+
+    def compare(self, value):
+        return value == self.value if self.exact_read else value & self.value
+
+    def check_coords(self, link_coords):
+        printl(
+            f"\tx: {self.get('x_max', 0x8FFFFFFF)} > {link_coords['x']} > {self.get('x_min', -0x8FFFFFFF)}")
+        printl(
+            f"\ty: {self.get('y', link_coords['y']) + 1000} > {link_coords['y']} >= {self.get('y', link_coords['y'])}")
+        printl(
+            f"\tz: {self.get('z_max', 0x8FFFFFFF)} > {link_coords['z']} > {self.get('z_min', -0x8FFFFFFF)}")
+
+        return (self.get("x_max", 0x8FFFFFFF) > link_coords["x"] > self.get("x_min", -0x8FFFFFFF) and
+                        self.get("z_max", 0x8FFFFFFF) > link_coords["z"] > self.get("z_min", -0x8FFFFFFF) and
+                        self.get("y", link_coords["y"]) + 1000 > link_coords["y"] >= self.get("y", link_coords["y"]))

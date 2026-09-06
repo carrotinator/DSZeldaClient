@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from ..Subclasses import DSTransition
     from .ItemClass import DSItem
     from .subclasses import Address
+    from .LocationClass import DSLocation
 
 logger = logging.getLogger("Client")
 
@@ -49,7 +50,7 @@ class DSZeldaClient(BizHawkClient):
     local_tracker: Dict[str, Any]
     item_id_to_name: Dict[int, str]
     location_name_to_id: Dict[str, int]
-    location_area_to_watches: Dict[int, dict[str, dict]]
+    location_area_to_watches: Dict[int, dict[str, "DSLocation"]]
     watches: Dict[str, "Address"]
     item_data: dict[str, "DSItem"]
 
@@ -63,7 +64,7 @@ class DSZeldaClient(BizHawkClient):
     stage_flag_address: "Address"  # Stage flag address
     health_address: "Address"
 
-    treasure_tracker: dict["Address" or str, int]
+    treasure_tracker: dict[Address | str, int]
 
     starting_flags: list
     dungeon_key_data: dict
@@ -279,7 +280,7 @@ class DSZeldaClient(BizHawkClient):
         """
         local_scouted_locations = set(ctx.locations_scouted)
         for loc in locations:
-            local_scouted_locations.add(LOCATIONS_DATA[loc]["id"])
+            local_scouted_locations.add(LOCATIONS_DATA[loc].id)
 
         if self.local_scouted_locations != local_scouted_locations:
             self.local_scouted_locations = local_scouted_locations
@@ -1159,17 +1160,7 @@ class DSZeldaClient(BizHawkClient):
                     continue
 
                 printl(f"Processing locs {loc_name}")
-                printl(
-                    f"\tx: {location.get('x_max', 0x8FFFFFFF)} > {link_coords['x']} > {location.get('x_min', -0x8FFFFFFF)}")
-                printl(
-                    f"\ty: {location.get('y', link_coords['y']) + 1000} > {link_coords['y']} >= {location.get('y', link_coords['y'])}")
-                printl(
-                    f"\tz: {location.get('z_max', 0x8FFFFFFF)} > {link_coords['z']} > {location.get('z_min', -0x8FFFFFFF)}")
-
-
-                if (location.get("x_max", 0x8FFFFFFF) > link_coords["x"] > location.get("x_min", -0x8FFFFFFF) and
-                        location.get("z_max", 0x8FFFFFFF) > link_coords["z"] > location.get("z_min", -0x8FFFFFFF) and
-                        location.get("y", link_coords["y"]) + 1000 > link_coords["y"] >= location.get("y", link_coords["y"])):
+                if location.check_coords(link_coords):
                     # For rooms with checks that move or are close, check what you got first
                     if "delay_pickup" in location:
                         if len(self.locations_in_scene) > i + 1:
@@ -1187,8 +1178,8 @@ class DSZeldaClient(BizHawkClient):
 
         if location is not None:
             if "set_bit" in location:
-                for addr, bit in location["set_bit"]:
-                    printl(f"Setting bit {bit} for location vanil {location['vanilla_item']}")
+                for addr, bit in location.set_bit:
+                    printl(f"Setting bit {bit} for location vanil {location.vanilla_item}")
                     await addr.set_bits(ctx, bit)
 
             # Delay reset of vanilla item from certain address reads
@@ -1207,7 +1198,7 @@ class DSZeldaClient(BizHawkClient):
 
         await self.check_location_post_processing(ctx, location)
 
-    def cancel_location_read(self, location) -> bool:
+    def cancel_location_read(self, location: "DSLocation") -> bool:
         """
         called on the main path of _process_checked_location.
         used to cancel special reads that should only happen on special reads
@@ -1225,7 +1216,7 @@ class DSZeldaClient(BizHawkClient):
 
     async def _set_delay_pickup(self, ctx, loc_name, location):
         delay_locations = []
-        delay_pickup = location["delay_pickup"]
+        delay_pickup = location.delay_pickup
         if type(delay_pickup) is str:
             delay_locations.append(delay_pickup)
         elif type(delay_pickup) is list:
@@ -1248,7 +1239,7 @@ class DSZeldaClient(BizHawkClient):
         item: str | list[str] = vanilla_item or location.get("vanilla_item", None)
         if item is None:
             return
-        if location.get("farmable", "") not in ["", "conditional"] and location["id"] in ctx.checked_locations:
+        if location.farmable not in ["", "conditional"] and location.id in ctx.checked_locations:
             return
         if isinstance(item, str):
             item_data = self.item_data[item]
@@ -1279,7 +1270,7 @@ class DSZeldaClient(BizHawkClient):
         """
         pass
 
-    async def check_location_post_processing(self, ctx, location: dict):
+    async def check_location_post_processing(self, ctx, location: "DSLocation"):
         """
         for running code on specific locations
         in st, this is used for sending goal on location
@@ -1356,7 +1347,7 @@ class DSZeldaClient(BizHawkClient):
         return 0
     # Called when checking location!
 
-    async def receive_special_items(self, ctx, item_name, item_data) -> list[tuple[int, list, str]]:
+    async def receive_special_items(self, ctx, item_name: str, item_data) -> list[tuple[int, list, str]]:
         """
         called in `_process_received_items` for adding custom item cases
         :param ctx:
@@ -1469,7 +1460,7 @@ class DSZeldaClient(BizHawkClient):
                 loc_data = LOCATIONS_DATA[loc_name]
                 # printl(f"Watch data: {loc_name} {prev_value} {loc_data['value']}")
 
-                comp = prev_value == loc_data["value"] if "exact_read" in loc_data else prev_value & loc_data["value"]
+                comp = prev_value == loc_data.value if loc_data.exact_read else prev_value & loc_data.value
                 if comp:
                     printl(f"Got read item {loc_name} from address BLANK"
                           f"looking at bit {loc_data['value']}")
@@ -1478,7 +1469,7 @@ class DSZeldaClient(BizHawkClient):
                     await self._process_checked_locations(ctx, loc_name, force_remove)
                     self.receiving_location = True
                     triggered_watches.append(loc_name)
-                    if "persistent" not in loc_data:
+                    if not loc_data.persistent:
                         self.watches.pop(loc_name)
 
         # Check if link is getting location
@@ -1700,7 +1691,7 @@ class DSZeldaClient(BizHawkClient):
 
         # Create memory watches for checks triggerd by flags, and make list for checking sram
         for loc_name, location in self.location_area_to_watches.get(scene, {}).items():
-            loc_id = location['id']
+            loc_id = location.id
 
             # Remove unincluded locations
             # if (("slot_data" not in location  # slot data removal handled separately
@@ -1712,7 +1703,7 @@ class DSZeldaClient(BizHawkClient):
             #     continue
 
             # Filter locations by slot data
-            if not check_slot_data(location) and "always_exist" not in location:
+            if not check_slot_data(location) and not location.always_exist:
                 # printl(f"\tLocation {loc_name} has the wrong slotdata.")
                 print_again = True
                 continue
@@ -1720,25 +1711,25 @@ class DSZeldaClient(BizHawkClient):
                 print_again = True
                 continue
 
-            if "read_object" in location:
+            if location.read_object:
                 watch_addr = await self.get_object_read_addr(ctx, location)
                 if not watch_addr:
                     continue
                 self.watches[loc_name] = watch_addr
-            if loc_id in locations_found and "address" in location:
-                read = await location["address"].read(ctx)
-                comp = read == location["value"] if "exact_read" in location else read & location["value"]
-                if comp and "persistent" not in location:
+            if loc_id in locations_found and location.address:
+                read = await location.address.read(ctx)
+                comp = location.compare(read)
+                if comp and not location.persistent:
                     printl(f"Location {loc_name} has already been found and triggered")
                     continue
             else:
-                if "sram_addr" in location and location["sram_addr"] is not None:
-                    active_srams.append((loc_name, location["sram_addr"], location["sram_value"]))
-                    sram_read_list.add(location["sram_addr"])
+                if location.sram_addr is not None:
+                    active_srams.append((loc_name, location.sram_addr, location.sram_value))
+                    sram_read_list.add(location.sram_addr)
                     printl(f"\tCreated sram read for location {loc_name}")
 
-            if "address" in location:
-                self.watches[loc_name] = location["address"]
+            if location.address:
+                self.watches[loc_name] = location.address
 
         if print_again:
             printl(f"Loaded Locations in scene {hex(scene)}: {list(self.locations_in_scene.keys())}")
