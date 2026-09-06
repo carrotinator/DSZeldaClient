@@ -32,10 +32,15 @@ def get_version() -> str:
 def cmd_carrot_asked(self: "BizHawkClientCommandProcessor"):
     """Prints debug info from the current scene. Same info as in the debug client."""
     from Utils import __version__
+    output = ""
+    print_debug.append(f"Current APWorld Version: {get_version()}")
+    print_debug.append(f"Current Archipelago Version: {__version__}")
     for s in print_debug:
-        logger.info(s)
-    logger.info(f"Current APWorld Version: {get_version()}")
-    logger.info(f"Current Archipelago Version: {__version__}")
+        output += s + '\n'
+    logger.info(output)
+    # logger.info(f"Current APWorld Version: {get_version()}")
+    # logger.info(f"Current Archipelago Version: {__version__}")
+    # logger.info(output)
     return True
 
 class DSZeldaClient(BizHawkClient):
@@ -1379,6 +1384,7 @@ class DSZeldaClient(BizHawkClient):
             if isinstance(item, str):
                 item_object = self.item_data[item]
                 write_list = await item_object.remove_vanilla(self, ctx, num_received_items)
+                printl(f"\tremoving {item}: {hex_f(write_list)} from removal func {item_object.remove_vanilla_func}")
                 await bizhawk.write(ctx.bizhawk_ctx, write_list)
             else:
                 # If item is a list of items, we instead want to check which one Link got and loop that back into this process
@@ -1390,6 +1396,7 @@ class DSZeldaClient(BizHawkClient):
                             break
                     elif new_item_read != _count:
                         self.last_vanilla_item.append(_item)
+                        printl(f"\t\tIdentified variable vanilla item {_item}")
                         break
         self.last_vanilla_item.clear()
 
