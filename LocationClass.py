@@ -57,6 +57,7 @@ class DSLocation:
             self.scenes = {self.scenes}
         if self.shop_model:
             self.exact_read = True
+            self.delay_reset = True
 
     # def __init__(self, name, **kwargs):
     #     self.name = name

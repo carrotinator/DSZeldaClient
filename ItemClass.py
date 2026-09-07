@@ -162,8 +162,8 @@ async def remove_vanilla_progressive(client: "DSZeldaClient", ctx: "BizHawkClien
     else:
         index = client.item_count(ctx, item.name)
 
-    index = min(index, len(item.progressive)-1)
-    if index == len(item.progressive)-1:
+    index = min(index, len(item.progressive))
+    if index == len(item.progressive):
         printl(f"\tHas max {item.name}, cancel removal")
         return res  # do nothing if already at max
 
