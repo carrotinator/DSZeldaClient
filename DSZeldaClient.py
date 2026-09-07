@@ -172,7 +172,7 @@ class DSZeldaClient(BizHawkClient):
         self.reload_stage_flags: bool = False
         self.stage_flags: dict[int, list[int]] = {}
 
-        self.traversed_entrances: set[int] = self.traversed_entrances
+        self.traversed_entrances: set[int] = set()
 
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
