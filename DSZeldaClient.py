@@ -172,6 +172,8 @@ class DSZeldaClient(BizHawkClient):
         self.reload_stage_flags: bool = False
         self.stage_flags: dict[int, list[int]] = {}
 
+        self.traversed_entrances: set[int] = self.traversed_entrances
+
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
 
@@ -1967,51 +1969,6 @@ class DSZeldaClient(BizHawkClient):
         printl(f"Could not find matching map object, probably restarted client in already loaded room.")
         return (None, 0) if return_index else None
 
-    async def set_chest_contents(self, ctx):
-        write_list = []
-        set_shop = False
-        for loc, data in self.locations_in_scene.items():
-            model = ctx.slot_data.get("location_models", {}).get(str(data["id"]), 0x1E)
-            chest_offset = data.get("chest_offset", None)
-            gift_addr = data.get("gift_addr", None)
-
-            if gift_addr is not None:
-                # printl("gift_addr", isinstance(gift_addr, str), gift_addr, loc)
-                if isinstance(gift_addr, str) and gift_addr == "island_shop":
-                    # Shops are special
-                    if set_shop:
-                        continue
-                    shop_lookup = {0xB: 0x26e324, 0xC: 0x263964, 0x10: 0x2692d4}
-                    shop_addr = Address.from_pointer(shop_lookup[self.current_stage])
-                    vanilla_item = await shop_addr.read(ctx, silent=True)
-                    printl(f"Shop item lookup: {shop_addr} {vanilla_item} {shop_location_lookup.get(vanilla_item)}")
-                    if shop_location_lookup.get(vanilla_item) == loc:
-                        write_list.append(shop_addr.get_inner_write_list(model))
-                        set_shop = True
-                    continue
-
-                gift_addr: list[Address] = gift_addr if isinstance(gift_addr, list) else [gift_addr]
-                for addr in gift_addr:
-                    printl(f"\tSetting read item model: {loc} {hex(model)}")
-                    write_list.append(addr.get_inner_write_list(model))
-
-            elif chest_offset is not None:
-                # Farmable locations set treasure
-                if "farmable" in data and data["id"] in ctx.checked_locations:
-                    model = 0x7D
-                vanilla_item_model = self.item_data[data["vanilla_item"]].vanilla_model
-                printl(f"\tVanilla model {vanilla_item_model} offsets {chest_offset}")
-                chest_obj = await self.find_table_object(ctx, chest_offset, 9, vanilla_item_model, size=1)
-                if chest_obj:
-                    chest_content_addr = Address.from_pointer(chest_obj + 9 * 4, 1)
-                    write_list.append(chest_content_addr.get_inner_write_list(model))
-                    printl(f"Writing {model} to addr {chest_content_addr} for loc {loc}")
-                else:
-                    printl(f"Could not find chests for item swapping, probably restarted client in already loaded room.")
-
-        if write_list:
-            printl(f"Setting chest contents: {hex_f(write_list)}")
-            await bizhawk.write(ctx.bizhawk_ctx, write_list)
 
     @staticmethod
     async def frame_advance(ctx):
