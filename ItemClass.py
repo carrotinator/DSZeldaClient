@@ -79,8 +79,8 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
     res = []
     if hasattr(item, "progressive"):
         prog_received = min(client.item_count(ctx, item.name, num_received_items),
-                            len(item.progressive)-1)
-        item_address, item_value = item.progressive[prog_received]
+                            len(item.progressive))
+        item_address, item_value = item.progressive[prog_received-1]
     else:
         item_address = item.address
 
@@ -102,7 +102,7 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
         if hasattr(item, "max") and item_value > item.max:
             item_value = min(item.max, prev_value)
     elif hasattr(item, "progressive"):
-        if "progressive_overwrite" in item.tags and prog_received >= 1:
+        if "progressive_overwrite" in item.tags and prog_received > 1:
             item_value = item_value  # Bomb upgrades need to overwrite or everything breaks
         else:
             item_value = prev_value | item_value
@@ -134,8 +134,8 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
                 else:
                     res += item.ammo_address.get_write_list(ammo_list[prog])
         else:
-            prog_received = min(prog_received, len(item.give_ammo)-1)
-            res += item.ammo_address.get_write_list(item.give_ammo[prog_received])
+            prog_received = min(prog_received, len(item.give_ammo))
+            res += item.ammo_address.get_write_list(item.give_ammo[prog_received-1])
     if hasattr(item, "set_bit"):
         for adr, bit in item.set_bit:
             bit_prev = await adr.read(ctx)
