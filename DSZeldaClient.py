@@ -1298,7 +1298,7 @@ class DSZeldaClient(BizHawkClient):
             self.last_vanilla_item.pop()
             printl(f"oops it's vanilla or dummy! {self.last_vanilla_item}")
         elif self.current_scene not in getattr(item_data, "blocked_scenes", []):
-            write_list += await item_data.receive_item(self, ctx, num_received_items)
+            write_list += await item_data.receive_item(self, ctx, num_received_items+1)
 
         # Write the new item to memory!
         printl("Write list:")
@@ -1531,7 +1531,7 @@ class DSZeldaClient(BizHawkClient):
 
         if num_received_items is not None and ctx.server and ctx.server.socket.open:
             if num_received_items < len(ctx.items_received):
-                printl(f"Received items: {num_received_items}")
+                printl(f"Received items: {num_received_items}/{len(ctx.items_received)}")
                 if self._just_entered_game:
                     self._log_received_items = True
                 await self._process_received_items(ctx, num_received_items, self._log_received_items)

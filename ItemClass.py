@@ -80,7 +80,9 @@ async def receive_normal(client: "DSZeldaClient", ctx: "BizHawkClientContext", i
     if hasattr(item, "progressive"):
         prog_received = min(client.item_count(ctx, item.name, num_received_items),
                             len(item.progressive))
-        item_address, item_value = item.progressive[prog_received-1]
+        item_address, item_value = item.progressive[max(prog_received-1, 0)]
+        print(f"\tProgressive stages found for {item.name}: {prog_received}")
+        print(f"\t items received {num_received_items}/{len(ctx.items_received)} {ctx.items_received[-1].item}")
     else:
         item_address = item.address
 
@@ -203,7 +205,11 @@ async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientCont
             if type(item_value) is str:
                 value = await client.received_special_incremental(ctx, item)  # TODO: hook into this somehow?
             else:
-                value = item.value * client.item_count(ctx, item.name) + getattr(item, "base_count", 0)
+                value = 0
+                if hasattr(item, "variants"):
+                    for variant in item.variants:
+                        value += client.item_data[variant].get_value(ctx) * client.item_count(ctx, variant)
+                value += item.value * client.item_count(ctx, item.name) + getattr(item, "base_count", 0)
         else:
             value = max(prev_value - value, 0)
     else:
@@ -303,6 +309,9 @@ class DSItem:
 
     def post_process(self, client: "DSZeldaClient", ctx: "BizHawkClientContext"):
         return
+
+    def get_value(self, ctx):
+        return self.value
 
     def __str__(self):
         return f"{self.name}"
