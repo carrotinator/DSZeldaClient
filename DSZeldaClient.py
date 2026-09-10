@@ -1821,10 +1821,14 @@ class DSZeldaClient(BizHawkClient):
                     for loc in hint_data["locations"]:
                         loc_id = self.location_name_to_id[loc]
                         if loc_id in locations_checked or loc_id not in ctx.server_locations:
+                            print(f"\tScouted location {loc_id} not in server {ctx.server_locations}")
                             continue
                         local_scouted_locations.add(loc_id)
             else:
-                local_scouted_locations.add(self.location_name_to_id[hint_name])
+                loc_id = self.location_name_to_id[hint_name]
+                if loc_id in ctx.locations_scouted or loc_id not in ctx.server_locations:
+                    continue
+                local_scouted_locations.add(loc_id)
         if local_scouted_locations:
             printl(f"found hints {local_scouted_locations}")
         # Send hints
