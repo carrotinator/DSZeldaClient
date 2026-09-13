@@ -974,7 +974,7 @@ class DSZeldaClient(BizHawkClient):
                 elif operation[0] == "has_exact":
                     if count_want != count_have:
                         return False
-                elif operation[0] == "not_has":
+                elif operation[0] == "not":
                     if count_have >= count_want:
                         return False
 
