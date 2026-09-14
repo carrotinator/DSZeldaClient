@@ -518,8 +518,9 @@ class DSZeldaClient(BizHawkClient):
                     printl(f"\t{i} => {v} {i.exit}")
 
                 if self.reload_stage_flags:
-                    self.reload_stage_flags = False
+                    print(f"reloading stage flags!")
                     await self.set_stage_flags(ctx, self.current_stage)
+                    self.reload_stage_flags = False
 
                 await self.process_on_room_load(ctx, current_scene, read_result)
                 await self._load_local_locations(ctx, self.current_scene)
