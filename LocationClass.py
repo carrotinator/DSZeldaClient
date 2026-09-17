@@ -6,18 +6,20 @@ from typing import Iterable, Any
 class DSLocation:
     name: str
     id: int
-    scenes: set[int] | int | None = None
+    scenes: Iterable[int] | int | None = None
     region: str | None = None
-    from_entrances: list[int] | None = None
+    from_entrances: list[int] | int | None = None
 
-    vanilla_item: str | None = None
+    vanilla_item: str | Iterable[str] | None = None
     item_override: str | None = None
+    location_groups: list[str] = None
 
     y: int | None = None
     x_max: int | None = None
     x_min: int | None = None
     z_max: int | None = None
     z_min: int | None = None
+    from_coords: dict[str, int] | None = None
 
     address: Address | None = None
     value: int = 1
@@ -28,27 +30,42 @@ class DSLocation:
     do_special: str | dict = ""
     read_object: bool = False  # read the chest opening instead of normal triggers
     set_bit: list[Iterable] | None = None
+    ut_connect: str = ""
 
     delay_reset: bool = False  # don't reset vanilla item from this location until getting another location or changing scene
     delay_pickup: str | list[str] | None = None
     conditional: bool | str = False
     farmable: bool | str = False
     has_slot_data: list[Iterable] | None = None
+    any_slot_data: list[Iterable] | None = None
     reload_chests: bool = False
     force_vanilla: bool = False
     persistent: bool = False  # don't remove from local locations in scene after triggering
     always_exist: bool = False
     restock: str = ""  # the category it's restocked behind, allowing it out early when applicable
     dig_spot: bool = False
+    priority: int = -1
+    no_model: bool = False
+    local: bool = False
+
+    hidden_vanilla_item: list[str] | None = None
 
     dungeon: str = ""  # for in_own_dungeon gen and dungeon exclusion
+    tos_section: int | str = 0
     boss_room: str = ""
     post_dungeon: str = ""
     boss_reward_location: bool = False
     island_shop: bool = False
+    stamp: int | None = None
+    minigame: list[int] = None
+    goal: str = ""
+    rabbit: bool = False
+    realm: str = ""
+    count: int = 0
 
     hint_entrance: str | list[str] = ""
     hint_entrance_secondary: str | list[str] = ""
+    hint_entrance_tertiary: str | list[str] = ""
 
     sram_addr: Address | None = None
     sram_value: int | None = None
