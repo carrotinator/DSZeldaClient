@@ -1,6 +1,6 @@
 from .subclasses import Address, printl
 from dataclasses import dataclass
-from typing import Iterable, Any
+from typing import Iterable, Any, Callable
 
 @dataclass
 class DSLocation:
@@ -34,7 +34,7 @@ class DSLocation:
 
     delay_reset: bool = False  # don't reset vanilla item from this location until getting another location or changing scene
     delay_pickup: str | list[str] | None = None
-    conditional: bool | str = False
+    conditional: Callable | None = None
     farmable: bool | str = False
     has_slot_data: list[Iterable] | None = None
     any_slot_data: list[Iterable] | None = None
