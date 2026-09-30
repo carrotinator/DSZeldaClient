@@ -407,7 +407,8 @@ class DSTransition:
 
     def detect_exit(self, scene, entrance, coords, y_offest):
         if self.detect_exit_scene(scene, entrance):
-            if entrance < 0xF0 and not hasattr(self, "extra_data"):
+            if entrance < 0xF0 and not self.extra_data:
+                printl(f"Detected entrance {self.name}")
                 return True
             # Continuous entrance check
             x_max = self.extra_data.get("x_max", 0x8FFFFFFF)
