@@ -475,6 +475,8 @@ class DSZeldaClient(BizHawkClient):
                 self._entered_entrance = time.time()  # Triggered first part of loading - setting new room
                 self.entering_dungeon = None
                 if self.delay_reset or self.last_vanilla_item:
+                    if not self.delay_reset:
+                        raise ValueError(f"self.last_vanilla_items had residual data")
                     self.delay_reset = 0
                     await self._remove_vanilla_item(ctx, num_received_items)
 
@@ -1669,16 +1671,16 @@ class DSZeldaClient(BizHawkClient):
             return True
 
         async def check_entrance(loc):
-            if "from_entrances" in loc:
-                if self.current_entrance not in loc["from_entrances"]:
+            if loc.from_entrances:
+                if self.current_entrance not in loc.from_entrances:
                     printl(f"\tLocation {loc_name} has the wrong entrance {hex_f(self.current_entrance)} {loc['from_entrances']}.")
                     try:
                         self.locations_in_scene.pop(loc_name)
                     except KeyError:
                         pass
                     return False
-            if "from_coords" in loc and self.current_entrance >= 0xFA:
-                coord_data = loc.get("from_coords", {})
+            if loc.from_coords and self.current_entrance >= 0xFA:
+                coord_data = loc.from_coords
                 coords = await self.get_coords(ctx)
                 printl(f"\tLocation Coords: {coords} reqs {coord_data} "
                        f"{coord_data.get('x_max', 0xFFFFFFF) > coords['x'] > coord_data.get('x_min', -0xFFFFFFF)}"

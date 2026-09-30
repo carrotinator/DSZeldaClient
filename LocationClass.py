@@ -76,6 +76,8 @@ class DSLocation:
         if self.shop_model:
             self.exact_read = True
             self.delay_reset = True
+        if isinstance(self.from_entrances, int):
+            self.from_entrances = [self.from_entrances]
 
     # def __init__(self, name, **kwargs):
     #     self.name = name
