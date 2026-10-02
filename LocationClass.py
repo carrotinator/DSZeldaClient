@@ -13,6 +13,7 @@ class DSLocation:
     vanilla_item: str | Iterable[str] | None = None
     item_override: str | None = None
     location_groups: list[str] = None
+    local: bool = False  # Always have items from own world
 
     y: int | None = None
     x_max: int | None = None
@@ -46,9 +47,8 @@ class DSLocation:
     dig_spot: bool = False
     priority: int = -1
     no_model: bool = False
-    local: bool = False
 
-    hidden_vanilla_item: list[str] | None = None
+    hidden_vanilla_item: list[str] | None = None  # For shops that don't want to change model early
 
     dungeon: str = ""  # for in_own_dungeon gen and dungeon exclusion
     tos_section: int | str = 0

@@ -475,8 +475,6 @@ class DSZeldaClient(BizHawkClient):
                 self._entered_entrance = time.time()  # Triggered first part of loading - setting new room
                 self.entering_dungeon = None
                 if self.delay_reset or self.last_vanilla_item:
-                    if not self.delay_reset:
-                        raise ValueError(f"self.last_vanilla_items had residual data")
                     self.delay_reset = 0
                     await self._remove_vanilla_item(ctx, num_received_items)
 
