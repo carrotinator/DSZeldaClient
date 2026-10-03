@@ -1238,10 +1238,12 @@ class DSZeldaClient(BizHawkClient):
     # Processes events defined in data\dynamic_flags.py
 
     async def _set_vanilla_item(self, ctx, location, vanilla_item: str | None = None):
-        item: str | list[str] = vanilla_item or location.get("vanilla_item", None)
+        printl(f"Setting vanilla for {location.name}")
+        item: str | list[str] = vanilla_item or location.vanilla_item
         if item is None:
             return
-        if location.farmable not in ["", "conditional"] and location.id in ctx.checked_locations:
+        if location.farmable and location.farmable not in ["conditional"] and location.id in ctx.checked_locations:
+            printl(f"No vanilla item")
             return
         if isinstance(item, str):
             item_data = self.item_data[item]
