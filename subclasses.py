@@ -60,8 +60,8 @@ def compare_slot_data(ctx, data):
                 slot, value, *args = a
 
             slot_value = ctx.slot_data.get(slot, None)
-            # printl(f"\t\tTesting slot {slot_value} {type(slot_value)} {value}")
-            if type(value) is list:
+            # printl(f"\t\tTesting slot {slot} {slot_value} {value}")
+            if isinstance(value, list):
                 if slot_value not in value:
                     return False
             elif isinstance(slot_value, list):
@@ -73,6 +73,7 @@ def compare_slot_data(ctx, data):
                         return False
             else:
                 if slot_value != value:
+                    # print(f"\t{slot_value} != {value}")
                     return False
 
     if "any_slot_data" in data:
@@ -82,7 +83,6 @@ def compare_slot_data(ctx, data):
             if slot not in value:
                 return True
         return False
-
     return True
 
 # Get address from pointer
