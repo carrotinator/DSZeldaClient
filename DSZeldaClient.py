@@ -174,6 +174,8 @@ class DSZeldaClient(BizHawkClient):
 
         self.traversed_entrances: set[int] = set()
 
+        self.loaded_addresses: bool = False
+
     def item_count(self, ctx, item_name, items_received=-1) -> int:
         return self.item_data[item_name].get_count(ctx, items_received)
 
@@ -341,6 +343,12 @@ class DSZeldaClient(BizHawkClient):
         """Return True if in game"""
         return in_game
 
+    async def load_addresses(self, ctx) -> bool:
+        """
+        Return true to restart watcher loop
+        """
+        return False
+
     async def game_watcher(self, ctx: "BizHawkClientContext") -> None:
         if not ctx.server or not ctx.server.socket.open or ctx.server.socket.closed or ctx.slot is None or ctx.slot == 0:
             self._just_entered_game = True
@@ -397,7 +405,8 @@ class DSZeldaClient(BizHawkClient):
             self.read_result = read_result = await read_multiple(ctx, self.main_read_list)
 
             in_game = self.in_game_comparison(read_result[self.addr_game_state])
-            self.current_stage = read_result[self.addr_stage]
+            if self.loaded_addresses:
+                self.current_stage = read_result[self.addr_stage]
 
             # Loading variables
             loading_scene = self.process_loading_variable(read_result)
@@ -435,6 +444,9 @@ class DSZeldaClient(BizHawkClient):
                                            # 6 frame intervals to catch bounce timings
                 await self.enter_game(ctx)
                 printl(f"Started Game")
+                if await self.load_addresses(ctx):
+                    print(f"Restarting main loop on load addresses")
+                    return
 
             self.is_dead = not read_result.get(self.health_address, 12)
 

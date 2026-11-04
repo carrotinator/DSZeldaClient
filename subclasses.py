@@ -145,7 +145,9 @@ class Address:
         if self.addr:
             self.validate()
 
-    def set_addr(self, value):
+    def set_addr(self, value, size=None):
+        if size is not None:
+            self.size = size
         self.addr = value
         self.addr_eu = value
         self.addr_lookup[0] = value
@@ -280,7 +282,7 @@ class Address:
     @classmethod
     def pointer(cls, addr, name=""):
         """Pointer from Data TCM"""
-        return cls(addr, addr, 4, "Data TCM", name)
+        return cls(addr, addr, 3, "Data TCM", name)
 
     @classmethod
     def from_pointer(cls, addr, size=1, domain="Main RAM", name=""):
@@ -312,10 +314,16 @@ class AddressLoader(Address):
         return await super().read_bytes(ctx)
 
 class DoubleAddressLoader(AddressLoader):
+    """
+    Loads a pointer, and then loads the new pointer
+    """
+    def __init__(self, dtcm_addr, size=1, load_offset=0, double_load_offset=0, domain="Main RAM", name=""):
+        self.double_load_offset = double_load_offset
+        super().__init__(dtcm_addr, size, load_offset, domain, name)
 
     async def load(self, ctx):
-        pointer = Address.from_pointer(await self.dtcm_addr.read(ctx), size=3)
-        self.set_addr(await pointer.read(ctx) + self.load_offset)
+        pointer = Address.from_pointer(await self.dtcm_addr.read(ctx) + self.load_offset, size=3)
+        self.set_addr(await pointer.read(ctx) + self.double_load_offset)
 
 async def load_multi(ctx, loader_list: list["AddressLoader"]):
     """Load multiple address loaders"""
