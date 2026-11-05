@@ -304,7 +304,7 @@ class AddressLoader(Address):
         self.dtcm_addr = dtcm_addr if isinstance(dtcm_addr, Address) else Address.from_pointer(dtcm_addr, size=3)  # usually when there's an offset, it's in main RAM
         self.load_offset = load_offset
         super().__init__(None, None, size, domain, name)
-        print(f"Loader {self} with dtcm {self.dtcm_addr}")
+        # print(f"Loader {self} with dtcm {self.dtcm_addr}")
 
     async def load(self, ctx):
         self.set_addr(await self.dtcm_addr.read(ctx) + self.load_offset)
@@ -325,6 +325,19 @@ class DoubleAddressLoader(AddressLoader):
     async def load(self, ctx):
         pointer = Address.from_pointer(await self.dtcm_addr.read(ctx) + self.load_offset, size=3)
         self.set_addr(await pointer.read(ctx) + self.double_load_offset)
+
+class MultiAddressLoader(AddressLoader):
+    """For loading long pointer chains. Define the offsets for each step in offset list."""
+
+    def __init__(self, dtcm_addr, size=1, offset_list:list[int]=None, domain="Main RAM", name=""):
+        self.offset_list = [0] if offset_list is None else offset_list
+        super().__init__(dtcm_addr, size, self.offset_list[0], domain, name)
+
+    async def load(self, ctx):
+        next_pointer = Address.from_pointer(await self.dtcm_addr.read(ctx) + self.offset_list[0], size=3)
+        for offset in self.offset_list[1:]:
+            next_pointer = Address.from_pointer(await next_pointer.read(ctx) + offset, size=3)
+        self.set_addr(next_pointer)
 
 async def load_multi(ctx, loader_list: list["AddressLoader"]):
     """Load multiple address loaders"""
