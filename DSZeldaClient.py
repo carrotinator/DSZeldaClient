@@ -338,8 +338,7 @@ class DSZeldaClient(BizHawkClient):
         Called on connecting
         """
 
-    @staticmethod
-    def in_game_comparison(in_game):
+    async def is_in_game(self, ctx, in_game):
         """Return True if in game"""
         return in_game
 
@@ -360,6 +359,7 @@ class DSZeldaClient(BizHawkClient):
             self.last_saved_scene = None
             self.clear_variables()
             self.precision_mode = None
+            self.loaded_addresses = False
             ctx.watcher_timeout = 0.4
             return
 
@@ -404,7 +404,7 @@ class DSZeldaClient(BizHawkClient):
             # Read main read list
             self.read_result = read_result = await read_multiple(ctx, self.main_read_list)
 
-            in_game = self.in_game_comparison(read_result[self.addr_game_state])
+            in_game = await self.is_in_game(ctx, read_result[self.addr_game_state])
             if self.loaded_addresses:
                 self.current_stage = read_result[self.addr_stage]
 
