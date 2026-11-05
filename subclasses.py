@@ -242,7 +242,7 @@ class Address:
 
     def __str__(self):
         name = f"{self.name}: " if self.name else ""
-        return f"{name}{hex(self.get_address())}"
+        return f"{name}{hex_f(self.get_address())}"
 
     def __add__(self, other):
         return self.addr + other
@@ -301,9 +301,10 @@ class AddressLoader(Address):
     load_offset: int
 
     def __init__(self, dtcm_addr, size=1, load_offset=0, domain="Main RAM", name=""):
-        self.dtcm_addr = dtcm_addr
+        self.dtcm_addr = dtcm_addr if isinstance(dtcm_addr, Address) else Address.from_pointer(dtcm_addr, size=3)  # usually when there's an offset, it's in main RAM
         self.load_offset = load_offset
         super().__init__(None, None, size, domain, name)
+        print(f"Loader {self} with dtcm {self.dtcm_addr}")
 
     async def load(self, ctx):
         self.set_addr(await self.dtcm_addr.read(ctx) + self.load_offset)
@@ -329,7 +330,7 @@ async def load_multi(ctx, loader_list: list["AddressLoader"]):
     """Load multiple address loaders"""
     read_list: list = [addr.dtcm_addr for addr in loader_list]
     read_res = await read_multiple(ctx, read_list)
-    for loader in read_list:
+    for loader in loader_list:
         loader.set_addr(read_res[loader.dtcm_addr] + loader.load_offset)
 
 
