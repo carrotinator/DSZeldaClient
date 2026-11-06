@@ -140,6 +140,8 @@ class Address:
     def set_addr(self, value, size=None):
         if size is not None:
             self.size = size
+        if isinstance(value, Address):
+            value = value.addr
         self.addr = value
 
     def get_address(self):
@@ -237,6 +239,8 @@ class Address:
         return bool(self.addr)
 
     def __hash__(self):
+        if self.addr is None:
+            return 0
         return self.addr
 
     def __gt__(self, other):
@@ -257,16 +261,16 @@ class Address:
     @classmethod
     def pointer(cls, addr, name=""):
         """Pointer from Data TCM"""
-        return cls(addr, addr, 3, "Data TCM", name)
+        return cls(addr, 3, "Data TCM", name)
 
     @classmethod
     def from_pointer(cls, addr, size=1, domain="Main RAM", name=""):
         """When addresses are grabbed from pointers, the address is the same in all versions"""
-        return cls(addr, addr, size, domain, name)
+        return cls(addr, size, domain, name)
 
 class DTCM(Address):
     def __init__(self, addr):
-        super().__init__(addr, addr, 3, "Data TCM")
+        super().__init__(addr, 3, "Data TCM")
 
 class AddressLoader(Address):
     """
@@ -278,7 +282,7 @@ class AddressLoader(Address):
     def __init__(self, dtcm_addr, size=1, load_offset=0, domain="Main RAM", name=""):
         self.dtcm_addr = dtcm_addr if isinstance(dtcm_addr, Address) else Address.from_pointer(dtcm_addr, size=3)  # usually when there's an offset, it's in main RAM
         self.load_offset = load_offset
-        super().__init__(None, None, size, domain, name)
+        super().__init__(None, size, domain, name)
         # print(f"Loader {self} with dtcm {self.dtcm_addr}")
 
     async def load(self, ctx):
