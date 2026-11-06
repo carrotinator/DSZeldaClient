@@ -122,22 +122,14 @@ def split_bits(value, size):
     return ret
 
 class Address:
-    addr_eu: int
-    addr_us: int
     addr: int
-    current_region: int
     domain: str
     size: int
     offset: int
     name: str
 
-    def __init__(self, addr_eu, addr_us=None, size=1, domain="Main RAM", name=""):
-        self.addr_eu = addr_eu
-        self.addr_us = addr_us if addr_us else None
-        self.addr_lookup = [self.addr_eu, self.addr_us]
-        self.addr = self.addr_eu
-
-        self.current_region = 0
+    def __init__(self, addr, size=1, domain="Main RAM", name=""):
+        self.addr = addr
         self.domain = domain
         self.size = size
         self.name = name
@@ -149,31 +141,14 @@ class Address:
         if size is not None:
             self.size = size
         self.addr = value
-        self.addr_eu = value
-        self.addr_lookup[0] = value
 
-    def get_address(self, region=None):
-        if region is not None:
-            region = self._region_int(region)
-            return self.addr_lookup[region]
+    def get_address(self):
         return self.addr
 
     def validate(self):
         if self.domain == "Main RAM":
-            if not 0 < self.addr_eu < 0x400000:
+            if not 0 < self.addr < 0x400000:
                 self.set_addr(0)
-
-    def set_region(self, region: str or int):
-        self.current_region = self._region_int(region)
-        self.addr = self.addr_lookup[self.current_region]
-
-    @staticmethod
-    def _region_int(region: str or int):
-        if isinstance(region, str):
-            assert region.lower() in ["eu", "us"]
-            region = ["eu", "us"].index(region.lower())
-        assert region in [0, 1]
-        return region
 
     def get_read_list(self):
         return [self.get_inner_read_list()]
