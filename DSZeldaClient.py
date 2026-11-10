@@ -425,7 +425,6 @@ class DSZeldaClient(BizHawkClient):
                     await self._process_game_completion(ctx)
                 if not self.precision_operation:
                     return
-
             # While game from main menu
             if in_game and not self._previous_game_state:
                 if not self.precision_operation and not await self.watched_intro_cs(ctx):
@@ -578,6 +577,7 @@ class DSZeldaClient(BizHawkClient):
                         printl("Missed loading read, using backup")
 
             if self.precision_operation:
+                print(f"UNLOCK!")
                 await bizhawk.unlock(ctx.bizhawk_ctx)
                 self.precision_operation = []
 
@@ -1991,6 +1991,7 @@ class DSZeldaClient(BizHawkClient):
 
     @staticmethod
     async def frame_advance(ctx):
+        print(f"FRAME ADVANCE")
         await bizhawk.unlock(ctx.bizhawk_ctx)
         await bizhawk.lock(ctx.bizhawk_ctx)
 
