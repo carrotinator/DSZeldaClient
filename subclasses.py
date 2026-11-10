@@ -121,6 +121,10 @@ def split_bits(value, size):
         value = (value & f) >> 8
     return ret
 
+# Convert int to ascii
+def to_ascii(i: int):
+    return bytes([byte for byte in split_bits(i,4) if byte != 0]).decode('ascii')
+
 class Address:
     addr: int
     domain: str
