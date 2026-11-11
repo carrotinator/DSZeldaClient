@@ -4,11 +4,12 @@ from typing import Iterable, Any, Callable
 
 @dataclass
 class DSLocation:
-    name: str
-    id: int
+    name: str | tuple[str, str]
+    id: int | tuple[int, int]
     scenes: Iterable[int] | int | None = None
     region: str | None = None
     from_entrances: list[int] | int | None = None
+    localized: int | None = None  # 0 = EU, 1 = US/AU
 
     vanilla_item: str | Iterable[str] | None = None
     item_override: str | None = None
@@ -36,6 +37,7 @@ class DSLocation:
     delay_reset: bool = False  # don't reset vanilla item from this location until getting another location or changing scene
     delay_pickup: str | list[str] | None = None
     conditional: Callable | None = None
+    conditional_2: Callable | None = None
     farmable: bool | str = False
     has_slot_data: list[Iterable] | None = None
     any_slot_data: list[Iterable] | None = None
@@ -69,6 +71,7 @@ class DSLocation:
 
     sram_addr: Address | None = None
     sram_value: int | None = None
+    pair_data: tuple[int, int] | None = None
 
     def __post_init__(self):
         if isinstance(self.scenes, int):

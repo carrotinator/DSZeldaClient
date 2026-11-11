@@ -348,6 +348,10 @@ class DSZeldaClient(BizHawkClient):
         """
         return False
 
+    def get_loc_id(self, ctx, name):
+        """Spirit tracks has multiple localizations for location names. Use this to make names point to what's active."""
+        return self.location_name_to_id[name]
+
     async def game_watcher(self, ctx: "BizHawkClientContext") -> None:
         if not ctx.server or not ctx.server.socket.open or ctx.server.socket.closed or ctx.slot is None or ctx.slot == 0:
             self._just_entered_game = True
@@ -1026,19 +1030,19 @@ class DSZeldaClient(BizHawkClient):
         # Check location conditions
         def check_locations(d):
             for loc in d.get("has_locations", []):
-                if self.location_name_to_id[loc] not in ctx.checked_locations:
+                if self.get_loc_id(ctx, loc) not in ctx.checked_locations:
                     return False
             for loc in d.get("not_has_locations", []):
-                if self.location_name_to_id[loc] in ctx.checked_locations:
+                if self.get_loc_id(ctx, loc) in ctx.checked_locations:
                     return False
             if "any_not_has_locations" in d:
                 for loc in d.get("any_not_has_locations", []):
-                    if self.location_name_to_id[loc] not in ctx.checked_locations:
+                    if self.get_loc_id(ctx, loc) not in ctx.checked_locations:
                         return True
                 return False
             if "any_has_locations" in d:
                 for loc in d.get("any_has_locations", []):
-                    if self.location_name_to_id[loc] in ctx.checked_locations:
+                    if self.get_loc_id(ctx, loc) in ctx.checked_locations:
                         return True
                 return False
             return True
@@ -1149,7 +1153,7 @@ class DSZeldaClient(BizHawkClient):
         # If sent with a pre-proces kwarg
         if pre_process is not None:
             self.receiving_location = True
-            loc_id = self.location_name_to_id[pre_process]
+            loc_id = self.get_loc_id(ctx, pre_process)
             location = LOCATIONS_DATA[pre_process]
             vanilla_item_name = location.get("vanilla_item", None)
             _item = self.item_data.get(vanilla_item_name, None) if isinstance(vanilla_item_name, str) else None
@@ -1167,7 +1171,7 @@ class DSZeldaClient(BizHawkClient):
             # Figure out what check was just gotten
             for i, loc in enumerate(locations_in_scene.items()):
                 loc_name, location = loc
-                loc_bytes = self.location_name_to_id[loc_name]
+                loc_bytes = self.get_loc_id(ctx, loc_name)
 
                 if "address" in location or "read_object" in location or self.cancel_location_read(location):
                     location = None
@@ -1531,7 +1535,7 @@ class DSZeldaClient(BizHawkClient):
                 self.delay_pickup = None
                 self.last_key_count = 0
                 if self.last_vanilla_item:
-                    if self.location_name_to_id[location] in ctx.checked_locations:
+                    if self.get_loc_id(ctx, location) in ctx.checked_locations:
                         printl(f"\tAlready found delay pickup location {location}")
                         await self._remove_vanilla_item(ctx, num_received_items)
                     else:
@@ -1834,13 +1838,13 @@ class DSZeldaClient(BizHawkClient):
                 else:
                     locations_checked = ctx.locations_scouted
                     for loc in hint_data["locations"]:
-                        loc_id = self.location_name_to_id[loc]
+                        loc_id = self.get_loc_id(ctx, loc)
                         if loc_id in locations_checked or loc_id not in ctx.server_locations:
                             print(f"\tScouted location {loc_id} not in server {ctx.server_locations}")
                             continue
                         local_scouted_locations.add(loc_id)
             else:
-                loc_id = self.location_name_to_id[hint_name]
+                loc_id = self.get_loc_id(ctx, hint_name)
                 if loc_id in ctx.locations_scouted or loc_id not in ctx.server_locations:
                     continue
                 local_scouted_locations.add(loc_id)
