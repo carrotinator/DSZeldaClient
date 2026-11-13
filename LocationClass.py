@@ -72,6 +72,7 @@ class DSLocation:
     sram_addr: Address | None = None
     sram_value: int | None = None
     pair_data: tuple[int, int] | None = None
+    local_pair_name: str = ""
 
     def __post_init__(self):
         if isinstance(self.scenes, int):
