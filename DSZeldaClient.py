@@ -1995,7 +1995,6 @@ class DSZeldaClient(BizHawkClient):
 
     @staticmethod
     async def frame_advance(ctx):
-        print(f"FRAME ADVANCE")
         await bizhawk.unlock(ctx.bizhawk_ctx)
         await bizhawk.lock(ctx.bizhawk_ctx)
 

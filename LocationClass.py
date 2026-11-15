@@ -120,3 +120,8 @@ class DSLocation:
 
     def __setitem__(self, key, value):
         return setattr(self, key, value)
+
+    def is_correct_localization(self, ctx):
+        if self.localized is None:
+            return True
+        return self.localized == ctx.slot_data["localization"]

@@ -212,8 +212,10 @@ async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientCont
                 value += item.value * client.item_count(ctx, item.name) + getattr(item, "base_count", 0)
         else:
             value = max(prev_value - value, 0)
-    else:
+    elif prev_value & value:
         value = prev_value & (~value)
+    else:
+        return []
 
     return address.get_write_list(value)
 
