@@ -30,12 +30,22 @@ def get_version() -> str:
     root = __name__.split(".DSZeldaClient")[0]
     return json.loads(pkgutil.get_data(root, "archipelago.json").decode())["world_version"]
 
+def get_client_as_command_processor(self: "BizHawkClientCommandProcessor"):
+    ctx = self.ctx
+    from worlds._bizhawk.context import BizHawkClientContext
+    assert isinstance(ctx, BizHawkClientContext)
+    client = ctx.client_handler
+    assert isinstance(client, DSZeldaClient)
+    return client
+
 def cmd_carrot_asked(self: "BizHawkClientCommandProcessor"):
     """Prints debug info from the current scene. Same info as in the debug client."""
     from Utils import __version__
+    client = get_client_as_command_processor(self)
     output = ""
     print_debug.append(f"Current APWorld Version: {get_version()}")
     print_debug.append(f"Current Archipelago Version: {__version__}")
+    print_debug.append(f"Current ROM Version: {getattr(client, "rom_version", "???")}")
     for s in print_debug:
         output += s + '\n'
     logger.info(output)
@@ -344,7 +354,14 @@ class DSZeldaClient(BizHawkClient):
 
     async def load_addresses(self, ctx) -> bool:
         """
-        Return true to restart watcher loop
+        Return true to restart watcher loop. called on entering game from menu
+        """
+        return False
+
+    async def load_addresses_delayed(self, ctx) -> bool:
+        """
+        Return true to restart watcher loop.
+        Called contiuously at start of watcher loop while in game
         """
         return False
 
@@ -441,15 +458,19 @@ class DSZeldaClient(BizHawkClient):
             # Single call just entered from menu methods
             if in_game and self._from_menu:
                 self._generate_er_map(ctx)
-                self._from_menu = False
                 self._just_entered_game = True
                 ctx.watcher_timeout = 0.1  # 9 frame interval to catch 11 frame ER windows (old)
                                            # 6 frame intervals to catch bounce timings
                 await self.enter_game(ctx)
                 printl(f"Started Game")
                 if await self.load_addresses(ctx):
+                    self._from_menu = False
                     print(f"Restarting main loop on load addresses")
                     return
+
+            # Some addresses might load late, restart loop when they do.
+            if await self.load_addresses_delayed(ctx):
+                return
 
             self.is_dead = not read_result.get(self.health_address, 12)
 

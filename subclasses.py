@@ -326,6 +326,7 @@ async def load_multi(ctx, loader_list: list["AddressLoader"]):
     """Load multiple address loaders"""
     read_list: list = [addr.dtcm_addr for addr in loader_list]
     read_res = await read_multiple(ctx, read_list)
+    print(f"multi load: {hex_f(read_res)}")
     for loader in loader_list:
         loader.set_addr(read_res[loader.dtcm_addr] + loader.load_offset)
 
