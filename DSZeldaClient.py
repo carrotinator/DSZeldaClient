@@ -707,6 +707,12 @@ class DSZeldaClient(BizHawkClient):
         :return:
         """
 
+    def cancel_warp(self, ctx) -> bool:
+        """
+        If you want to cancel an er before doing any checks (not counting map warp or wts)
+        """
+        return False
+
     async def _entrance_warp(self, ctx, going_to, entrance=0):
         e_write_list = []
         res = ((going_to & 0xFF00) >> 8, going_to & 0xFF, entrance)
@@ -768,6 +774,8 @@ class DSZeldaClient(BizHawkClient):
                 e_write_list, res = post_process(self.map_warp)
             self.map_warp = None
 
+        elif self.cancel_warp(ctx):
+            return res
 
         if self.er_in_scene and not e_write_list:
 
@@ -1771,7 +1779,7 @@ class DSZeldaClient(BizHawkClient):
 
             if location.address:
                 self.watches[loc_name] = location.address
-
+        print(f"Watches: {hex_f(self.watches)}")
         if print_again:
             printl(f"Loaded Locations in scene {hex(scene)}: {list(self.locations_in_scene.keys())}")
 

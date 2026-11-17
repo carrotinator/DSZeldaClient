@@ -197,7 +197,8 @@ async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientCont
     if "Rupee" in item.name:
         value = 9999 - prev_value if prev_value + value > 9999 else value
         value = prev_value if prev_value-value < 0 else value
-    if "incremental" or "monotone_incremental" in item.tags:
+    if "incremental" in item.tags or "monotone_incremental" in item.tags:
+        print(f"\tItem tags: {item.tags}")
         if hasattr(item, "max") and prev_value >= item.max:
             return []
         if "monotone_incremental" in item.tags:
@@ -212,10 +213,8 @@ async def remove_vanilla_normal(client: "DSZeldaClient", ctx: "BizHawkClientCont
                 value += item.value * client.item_count(ctx, item.name) + getattr(item, "base_count", 0)
         else:
             value = max(prev_value - value, 0)
-    elif prev_value & value:
-        value = prev_value & (~value)
     else:
-        return []
+        value = prev_value & (~value)
 
     return address.get_write_list(value)
 
